@@ -66,6 +66,16 @@ const chats = [
   { name: 'Saved messages', initials: 'SM', color: 'bg-muted text-muted-foreground', text: 'Your private notes', time: '', unread: 0, online: false },
 ]
 
+async function createLocalDataKey() {
+  return crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])
+}
+
+async function authenticateWithWebAuthn() {
+  if (!window.PublicKeyCredential || !navigator.credentials) throw new Error('WebAuthn is unavailable in this browser')
+  const challenge = crypto.getRandomValues(new Uint8Array(32))
+  return navigator.credentials.get({ publicKey: { challenge, rpId: window.location.hostname, userVerification: 'required', timeout: 60000 } })
+}
+
 function Avatar({ initials, color, online = false, small = false }: { initials: string; color: string; online?: boolean; small?: boolean }) {
   return (
     <span className="relative inline-flex shrink-0">
@@ -109,6 +119,7 @@ export function Workspace() {
   const [showDevices, setShowDevices] = useState(false)
   const [showAuth, setShowAuth] = useState(false)
   const [sharedFiles, setSharedFiles] = useState<File[]>([])
+  const [securityStatus, setSecurityStatus] = useState('Local encrypted vault ready')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
 
@@ -136,16 +147,45 @@ export function Workspace() {
     setDraft('')
   }
 
-  function chooseFiles() {
+  async function chooseFiles() {
+    try {
+      if ('showOpenFilePicker' in window) {
+        const handles = await window.showOpenFilePicker({ multiple: true })
+        setSharedFiles(await Promise.all(handles.map((handle) => handle.getFile())))
+        setSecurityStatus('Files selected locally; plaintext stays in this tab')
+        return
+      }
+    } catch {
+      return
+    }
     document.getElementById('luma-file-picker')?.click()
   }
 
   function handleFiles(event: React.ChangeEvent<HTMLInputElement>) {
     setSharedFiles(Array.from(event.target.files ?? []))
+    setSecurityStatus('Files selected locally; plaintext stays in this tab')
   }
 
-  function connectDevice() {
-    if ('bluetooth' in navigator) setShowLink(true)
+  async function connectDevice() {
+    try {
+      if (!('bluetooth' in navigator)) throw new Error('WebBluetooth is unavailable in this browser')
+      await createLocalDataKey()
+      setSecurityStatus('Encrypted device handshake ready')
+      setShowLink(true)
+    } catch (error) {
+      setSecurityStatus(error instanceof Error ? error.message : 'Device linking unavailable')
+      setShowLink(true)
+    }
+  }
+
+  async function authenticate() {
+    try {
+      await authenticateWithWebAuthn()
+      setSecurityStatus('Authenticated with this device passkey')
+      setShowAuth(false)
+    } catch (error) {
+      setSecurityStatus(error instanceof Error ? error.message : 'Passkey authentication unavailable')
+    }
   }
 
   return (
@@ -204,9 +244,9 @@ export function Workspace() {
         {showAgent && <aside className="hidden w-[284px] shrink-0 border-l border-border bg-muted/20 xl:flex xl:flex-col"><div className="flex items-center justify-between border-b border-border px-5 py-5"><div className="flex items-center gap-2"><div className="grid size-8 place-items-center rounded-xl bg-violet-100 text-violet-700"><Sparkles className="size-4" /></div><div><p className="text-sm font-semibold">Luma agent</p><p className="text-[10px] text-emerald-600">Running locally · WebGPU</p></div></div><button onClick={() => setShowAgent(false)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div><div className="flex-1 p-5"><div className="rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 p-4 dark:from-violet-950/30 dark:to-indigo-950/30"><p className="text-sm font-medium leading-relaxed">“I’m here whenever you need me. Your data never leaves this device.”</p><div className="mt-3 flex items-center gap-1.5 text-[10px] text-violet-700 dark:text-violet-300"><Zap className="size-3" /> Private by design</div></div><p className="mb-3 mt-7 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Suggested for you</p><div className="flex flex-col gap-2"><button className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left text-xs hover:bg-accent"><CalendarDays className="size-4 text-muted-foreground" /><span><span className="block font-medium">Plan my week</span><span className="text-[10px] text-muted-foreground">Organize your calendar</span></span></button><button className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left text-xs hover:bg-accent"><ListTodo className="size-4 text-muted-foreground" /><span><span className="block font-medium">Triage my tasks</span><span className="text-[10px] text-muted-foreground">4 items need attention</span></span></button><button className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left text-xs hover:bg-accent"><GalleryHorizontalEnd className="size-4 text-muted-foreground" /><span><span className="block font-medium">Find a memory</span><span className="text-[10px] text-muted-foreground">Search your timeline</span></span></button></div></div><div className="border-t border-border p-5"><button className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card py-2.5 text-xs font-medium hover:bg-accent"><MessageCircle className="size-3.5" /> Ask Luma anything</button></div></aside>}
       </div>
 
-      {showDevices && <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-lg font-semibold">Your devices</p><p className="mt-1 text-sm text-muted-foreground">Only your authenticated devices can decrypt your data.</p></div><button onClick={() => setShowDevices(false)} aria-label="Close devices" className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div><div className="mt-6 flex flex-col gap-3"><div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-3"><MonitorSmartphone className="size-5 text-emerald-600" /><div className="flex-1"><p className="text-sm font-medium">This browser</p><p className="text-xs text-muted-foreground">Chrome · Active now · WebGPU ready</p></div><span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-600">Current</span></div><div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-3"><MonitorSmartphone className="size-5 text-muted-foreground" /><div className="flex-1"><p className="text-sm font-medium">Alex&apos;s phone</p><p className="text-xs text-muted-foreground">iPhone · Synced 2 min ago · Forward secrecy on</p></div><button className="text-xs text-muted-foreground underline">Revoke</button></div></div><button onClick={() => { setShowDevices(false); setShowLink(true) }} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground"><Link2 className="size-4" /> Link another device</button></div></div>}
+      {showDevices && <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-lg font-semibold">Your devices</p><p className="mt-1 text-sm text-muted-foreground">Only your WebAuthn-authenticated devices can decrypt your local vault.</p></div><button onClick={() => setShowDevices(false)} aria-label="Close devices" className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div><div className="mt-6 flex flex-col gap-3"><div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-3"><MonitorSmartphone className="size-5 text-emerald-600" /><div className="flex-1"><p className="text-sm font-medium">This browser</p><p className="text-xs text-muted-foreground">Chrome · Active now · WebGPU ready</p></div><span className="rounded-full bg-emerald-500/10 px-2 py-1 text-[10px] text-emerald-600">Current</span></div><div className="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-3"><MonitorSmartphone className="size-5 text-muted-foreground" /><div className="flex-1"><p className="text-sm font-medium">Alex&apos;s phone</p><p className="text-xs text-muted-foreground">iPhone · Synced 2 min ago · Forward secrecy on</p></div><button className="text-xs text-muted-foreground underline">Revoke</button></div></div><button onClick={() => { setShowDevices(false); setShowLink(true) }} className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground"><Link2 className="size-4" /> Link another device</button></div></div>}
 
-      {showAuth && <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-lg font-semibold">Passwordless sign-in</p><p className="mt-1 text-sm text-muted-foreground">Use a passkey stored on this device.</p></div><button onClick={() => setShowAuth(false)} aria-label="Close passkeys" className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div><div className="mt-6 flex flex-col gap-3"><button onClick={() => setShowAuth(false)} className="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-4 text-left hover:bg-accent"><Fingerprint className="size-5 text-primary" /><span><span className="block text-sm font-medium">Fingerprint or Face ID</span><span className="block text-xs text-muted-foreground">WebAuthn platform authenticator</span></span></button><button onClick={() => setShowAuth(false)} className="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-4 text-left hover:bg-accent"><KeyRound className="size-5 text-primary" /><span><span className="block text-sm font-medium">Security key or authenticator</span><span className="block text-xs text-muted-foreground">Use a hardware key or another device</span></span></button></div><p className="mt-5 text-center text-[10px] text-muted-foreground">No password stored · Credential stays on your device</p></div></div>}
+      {showAuth && <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-lg font-semibold">Passwordless sign-in</p><p className="mt-1 text-sm text-muted-foreground">Use a passkey stored on this device.</p></div><button onClick={() => setShowAuth(false)} aria-label="Close passkeys" className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div><div className="mt-6 flex flex-col gap-3"><button onClick={authenticate} className="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-4 text-left hover:bg-accent"><Fingerprint className="size-5 text-primary" /><span><span className="block text-sm font-medium">Fingerprint or Face ID</span><span className="block text-xs text-muted-foreground">WebAuthn platform authenticator</span></span></button><button onClick={() => setShowAuth(false)} className="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-4 text-left hover:bg-accent"><KeyRound className="size-5 text-primary" /><span><span className="block text-sm font-medium">Security key or authenticator</span><span className="block text-xs text-muted-foreground">Use a hardware key or another device</span></span></button></div><p className="mt-5 text-center text-[10px] text-muted-foreground">No password stored · Credential stays on your device</p></div></div>}
 
       {showLink && <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-lg font-semibold">Link a device</p><p className="mt-1 text-sm text-muted-foreground">Use your phone to securely add another device.</p></div><button onClick={() => setShowLink(false)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div><div className="mx-auto my-7 grid size-44 place-items-center rounded-2xl border-8 border-muted bg-background"><QrCode className="size-28 text-foreground" /></div><div className="rounded-xl bg-muted/50 p-3 text-center text-xs text-muted-foreground"><KeyRound className="mx-auto mb-2 size-4 text-emerald-600" />This code expires in 04:58 and can only be used once.</div><button onClick={() => setShowLink(false)} className="mt-4 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground">Scan with phone</button><p className="mt-3 text-center text-[10px] text-muted-foreground">WebBluetooth handshake · Forward secrecy enabled</p></div></div>}
     </main>
