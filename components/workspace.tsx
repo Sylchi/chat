@@ -104,6 +104,16 @@ export function Workspace() {
   const [showAgent, setShowAgent] = useState(true)
   const [showLink, setShowLink] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+
+  useEffect(() => {
+    if (!mobileSidebarOpen) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMobileSidebarOpen(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [mobileSidebarOpen])
 
   useEffect(() => {
     if (!showLink) return
@@ -143,9 +153,16 @@ export function Workspace() {
           </div>
         </aside>
 
+        {mobileSidebarOpen && <div className="fixed inset-0 z-40 bg-foreground/25 backdrop-blur-sm md:hidden" onClick={() => setMobileSidebarOpen(false)} aria-hidden="true" />}
+        <aside aria-label="Mobile navigation" className={`fixed inset-y-0 left-0 z-50 flex w-[min(86vw,300px)] flex-col border-r border-border bg-card p-4 shadow-2xl transition-transform duration-200 md:hidden ${mobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+          <div className="mb-8 flex items-center justify-between"><div className="flex items-center gap-2"><div className="grid size-8 place-items-center rounded-xl bg-primary text-primary-foreground"><LockKeyhole className="size-4" /></div><span className="text-[17px] font-semibold tracking-tight">luma<span className="text-muted-foreground">/</span></span></div><button onClick={() => setMobileSidebarOpen(false)} aria-label="Close navigation" className="rounded-lg p-2 text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div>
+          <nav className="flex flex-col gap-1" aria-label="Mobile main navigation">{navItems.map(({ label, icon: Icon, count }) => <button key={label} onClick={() => { setActiveNav(label); setMobileSidebarOpen(false) }} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${activeNav === label ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}><Icon className="size-4" /><span>{label}</span>{count && <span className="ml-auto rounded-full bg-background/70 px-1.5 text-[10px]">{count}</span>}</button>)}</nav>
+          <div className="mt-auto border-t border-border pt-4"><button onClick={() => { setMobileSidebarOpen(false); setShowLink(true) }} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"><Link2 className="size-4" />Link a device</button><div className="mt-3 flex items-center gap-2 px-3 text-[11px] text-muted-foreground"><ShieldCheck className="size-3.5 text-emerald-600" />End-to-end encrypted</div></div>
+        </aside>
+
         <section className="flex min-w-0 flex-1 flex-col">
           <header className="flex h-[72px] items-center justify-between border-b border-border px-4 sm:px-6">
-            <div className="flex items-center gap-3"><button className="rounded-lg p-2 hover:bg-accent md:hidden"><Menu className="size-5" /></button><div><p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{activeNav}</p><h1 className="text-lg font-semibold tracking-tight">Good morning, Alex</h1></div></div>
+            <div className="flex items-center gap-3"><button onClick={() => setMobileSidebarOpen(true)} aria-label="Open navigation" className="rounded-lg p-2 hover:bg-accent md:hidden"><Menu className="size-5" /></button><div><p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{activeNav}</p><h1 className="text-lg font-semibold tracking-tight">Good morning, Alex</h1></div></div>
             <div className="flex items-center gap-2"><button className="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:flex"><Search className="size-3.5" />Search <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘ K</kbd></button><button className="relative rounded-xl p-2.5 text-muted-foreground hover:bg-accent"><Bell className="size-4" /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" /></button><Avatar initials="AR" color="bg-cyan-200 text-cyan-900" small /></div>
           </header>
 
