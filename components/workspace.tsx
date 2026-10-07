@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Archive,
   Bell,
@@ -73,6 +73,9 @@ function Avatar({ initials, color, online = false, small = false }: { initials: 
 }
 
 function WorkspacePanel({ activeNav, onSelectChat }: { activeNav: string; onSelectChat: (name: string) => void }) {
+  const [completedTasks, setCompletedTasks] = useState<string[]>([])
+  const [showAddContact, setShowAddContact] = useState(false)
+
   const panelData = {
     Calendar: { title: 'Calendar', description: 'Your week at a glance', icon: CalendarDays },
     Tasks: { title: 'Tasks', description: 'Keep momentum on what matters', icon: ListTodo },
@@ -84,7 +87,7 @@ function WorkspacePanel({ activeNav, onSelectChat }: { activeNav: string; onSele
 
   if (activeNav === 'Calendar') return <div className="flex-1 overflow-auto p-5 sm:p-8"><div className="mb-6 flex items-center justify-between"><div><p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">October 2026</p><h2 className="mt-1 text-2xl font-semibold">Calendar</h2></div><button className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">New event</button></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">{['Today · 11:00 — Team sync','Tomorrow · 14:30 — Call with Maya','Friday · 18:00 — Gallery review','Mon, Oct 12 · 09:00 — Plan the week','Tue, Oct 13 · 16:00 — Design crew','Sat, Oct 17 · All day — Weekend trip'].map((event) => <div key={event} className="rounded-2xl border border-border bg-card p-4"><CalendarDays className="mb-4 size-4 text-primary" /><p className="text-sm font-medium">{event}</p><p className="mt-1 text-xs text-muted-foreground">Private event · synced across 2 devices</p></div>)}</div></div>
 
-  if (activeNav === 'Tasks') return <div className="flex-1 overflow-auto p-5 sm:p-8"><div className="mb-6 flex items-center justify-between"><div><p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">4 open items</p><h2 className="mt-1 text-2xl font-semibold">Tasks</h2></div><button className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">Add task</button></div><div className="flex flex-col gap-3">{['Send final deck to design crew','Choose favorites from Saturday gallery','Book train for weekend trip','Review privacy settings'].map((task, index) => <label key={task} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4"><input type="checkbox" className="size-4 accent-primary" /><span className="flex-1 text-sm font-medium">{task}</span><span className="text-xs text-muted-foreground">{index < 2 ? 'Today' : 'This week'}</span></label>)}</div></div>
+  if (activeNav === 'Tasks') return <div className="flex-1 overflow-auto p-5 sm:p-8"><div className="mb-6 flex items-center justify-between"><div><p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">4 open items</p><h2 className="mt-1 text-2xl font-semibold">Tasks</h2></div><button className="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">Add task</button></div><div className="flex flex-col gap-3">{['Send final deck to design crew','Choose favorites from Saturday gallery','Book train for weekend trip','Review privacy settings'].map((task, index) => <label key={task} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4"><input type="checkbox" checked={completedTasks.includes(task)} onChange={() => setCompletedTasks((current) => current.includes(task) ? current.filter((item) => item !== task) : [...current, task])} className="size-4 accent-primary" /><span className="flex-1 text-sm font-medium">{task}</span><span className="text-xs text-muted-foreground">{index < 2 ? 'Today' : 'This week'}</span></label>)}</div></div>
 
   return <div className="flex-1 overflow-auto p-5 sm:p-8"><div className="mb-6"><p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">{activeNav}</p><h2 className="mt-1 text-2xl font-semibold">{panelData?.title}</h2><p className="mt-1 text-sm text-muted-foreground">{panelData?.description}</p></div>{activeNav === 'Gallery' ? <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">{['Saturday light','Maya · portrait set','Design crew · final deck','Weekend notes','Golden hour','Shared references'].map((item, index) => <div key={item} className={`flex aspect-square items-end rounded-2xl border border-border p-4 ${['bg-amber-100','bg-sky-100','bg-violet-100','bg-emerald-100','bg-rose-100','bg-orange-100'][index]}`}><span className="text-sm font-medium text-foreground/75">{item}</span></div>)}</div> : <div className="flex flex-col gap-3">{['New photo set added to Gallery','Maya replied to your message','Task completed: Review privacy settings','Device synced via WebBluetooth'].map((item) => <div key={item} className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4"><div className="grid size-9 place-items-center rounded-xl bg-muted"><Clock3 className="size-4 text-muted-foreground" /></div><div><p className="text-sm font-medium">{item}</p><p className="text-xs text-muted-foreground">Private activity · just now</p></div></div>)}</div>}</div>
 }
@@ -101,6 +104,15 @@ export function Workspace() {
   const [showAgent, setShowAgent] = useState(true)
   const [showLink, setShowLink] = useState(false)
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
+
+  useEffect(() => {
+    if (!showLink) return
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setShowLink(false)
+    }
+    window.addEventListener('keydown', handleKeyDown)
+    return () => window.removeEventListener('keydown', handleKeyDown)
+  }, [showLink])
 
   function sendMessage() {
     if (!draft.trim()) return
