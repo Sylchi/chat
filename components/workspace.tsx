@@ -1,0 +1,136 @@
+'use client'
+
+import { useState } from 'react'
+import {
+  Archive,
+  Bell,
+  CalendarDays,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  Clock3,
+  Contact,
+  Copy,
+  FileImage,
+  GalleryHorizontalEnd,
+  Hash,
+  KeyRound,
+  LayoutGrid,
+  Link2,
+  ListTodo,
+  LockKeyhole,
+  Menu,
+  MessageCircle,
+  Mic,
+  MoreHorizontal,
+  Paperclip,
+  Phone,
+  Plus,
+  QrCode,
+  Search,
+  Send,
+  Settings2,
+  ShieldCheck,
+  Sparkles,
+  UserRound,
+  Video,
+  Wifi,
+  X,
+  Zap,
+} from 'lucide-react'
+
+const navItems = [
+  { label: 'Inbox', icon: MessageCircle, count: 3 },
+  { label: 'Contacts', icon: Contact },
+  { label: 'Calendar', icon: CalendarDays },
+  { label: 'Tasks', icon: ListTodo, count: 4 },
+  { label: 'Gallery', icon: GalleryHorizontalEnd },
+  { label: 'Timeline', icon: Clock3 },
+]
+
+const chats = [
+  { name: 'Maya Chen', initials: 'MC', color: 'bg-amber-200 text-amber-900', text: 'The new photos are beautiful', time: '10:42', unread: 2, online: true },
+  { name: 'Design crew', initials: 'DC', color: 'bg-violet-200 text-violet-900', text: 'You: Sent the final deck', time: '09:18', unread: 0, online: false },
+  { name: 'Jordan Blake', initials: 'JB', color: 'bg-sky-200 text-sky-900', text: 'Video call · 23 min', time: 'Yesterday', unread: 0, online: false },
+  { name: 'Saved messages', initials: 'SM', color: 'bg-muted text-muted-foreground', text: 'Your private notes', time: '', unread: 0, online: false },
+]
+
+function Avatar({ initials, color, online = false, small = false }: { initials: string; color: string; online?: boolean; small?: boolean }) {
+  return (
+    <span className="relative inline-flex shrink-0">
+      <span className={`grid place-items-center rounded-full font-semibold ${small ? 'size-8 text-[10px]' : 'size-10 text-xs'} ${color}`}>{initials}</span>
+      {online && <span className="absolute -right-0.5 bottom-0 size-2.5 rounded-full border-2 border-card bg-emerald-500" />}
+    </span>
+  )
+}
+
+export function Workspace() {
+  const [activeNav, setActiveNav] = useState('Inbox')
+  const [activeChat, setActiveChat] = useState('Maya Chen')
+  const [draft, setDraft] = useState('')
+  const [messages, setMessages] = useState([
+    { from: 'them', text: 'Hey! I just finished editing the gallery from Saturday.', time: '10:36' },
+    { from: 'me', text: 'Oh nice, I can’t wait to see it. The light was perfect that day.', time: '10:37' },
+    { from: 'them', text: 'The new photos are beautiful', time: '10:42' },
+  ])
+  const [showAgent, setShowAgent] = useState(true)
+  const [showLink, setShowLink] = useState(false)
+
+  function sendMessage() {
+    if (!draft.trim()) return
+    setMessages((current) => [...current, { from: 'me', text: draft.trim(), time: 'Now' }])
+    setDraft('')
+  }
+
+  return (
+    <main className="min-h-screen bg-[#f4f5f7] p-3 text-foreground sm:p-5 lg:p-7">
+      <div className="mx-auto flex min-h-[calc(100vh-2rem)] max-w-[1480px] overflow-hidden rounded-[28px] border border-border/70 bg-card shadow-[0_24px_80px_-35px_rgba(15,23,42,0.35)]">
+        <aside className="hidden w-[236px] shrink-0 flex-col border-r border-border bg-muted/30 p-4 md:flex">
+          <div className="mb-8 flex items-center gap-2 px-2">
+            <div className="grid size-8 place-items-center rounded-xl bg-primary text-primary-foreground"><LockKeyhole className="size-4" /></div>
+            <span className="text-[17px] font-semibold tracking-tight">luma<span className="text-muted-foreground">/</span></span>
+          </div>
+          <div className="mb-5 flex items-center gap-3 rounded-2xl border border-border/70 bg-card p-3 shadow-sm">
+            <Avatar initials="AR" color="bg-cyan-200 text-cyan-900" online />
+            <div className="min-w-0"><p className="truncate text-sm font-semibold">Alex Rivera</p><p className="text-[11px] text-muted-foreground">Personal space</p></div>
+            <ChevronDown className="ml-auto size-3.5 text-muted-foreground" />
+          </div>
+          <nav className="flex flex-col gap-1" aria-label="Main navigation">
+            {navItems.map(({ label, icon: Icon, count }) => <button key={label} onClick={() => setActiveNav(label)} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm transition-colors ${activeNav === label ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-accent hover:text-foreground'}`}><Icon className="size-4" /><span>{label}</span>{count && <span className={`ml-auto rounded-full px-1.5 text-[10px] ${activeNav === label ? 'bg-primary-foreground/15 text-primary-foreground' : 'bg-background text-muted-foreground'}`}>{count}</span>}</button>)}
+          </nav>
+          <div className="mt-auto flex flex-col gap-1">
+            <button onClick={() => setShowLink(true)} className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"><Link2 className="size-4" />Link a device</button>
+            <button className="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground"><Settings2 className="size-4" />Settings</button>
+            <div className="mt-3 flex items-center gap-2 border-t border-border pt-4 px-2 text-[11px] text-muted-foreground"><ShieldCheck className="size-3.5 text-emerald-600" />End-to-end encrypted</div>
+          </div>
+        </aside>
+
+        <section className="flex min-w-0 flex-1 flex-col">
+          <header className="flex h-[72px] items-center justify-between border-b border-border px-4 sm:px-6">
+            <div className="flex items-center gap-3"><button className="rounded-lg p-2 hover:bg-accent md:hidden"><Menu className="size-5" /></button><div><p className="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">{activeNav}</p><h1 className="text-lg font-semibold tracking-tight">Good morning, Alex</h1></div></div>
+            <div className="flex items-center gap-2"><button className="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:flex"><Search className="size-3.5" />Search <kbd className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘ K</kbd></button><button className="relative rounded-xl p-2.5 text-muted-foreground hover:bg-accent"><Bell className="size-4" /><span className="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500" /></button><Avatar initials="AR" color="bg-cyan-200 text-cyan-900" small /></div>
+          </header>
+
+          <div className="flex min-h-0 flex-1">
+            <div className="hidden w-[268px] shrink-0 border-r border-border lg:block">
+              <div className="flex items-center justify-between px-4 py-4"><p className="text-sm font-semibold">Recent chats</p><button className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><Plus className="size-4" /></button></div>
+              <div className="flex flex-col gap-1 px-2">{chats.map((chat) => <button key={chat.name} onClick={() => setActiveChat(chat.name)} className={`flex items-center gap-3 rounded-xl p-3 text-left ${activeChat === chat.name ? 'bg-accent' : 'hover:bg-muted/60'}`}><Avatar initials={chat.initials} color={chat.color} online={chat.online} /><span className="min-w-0 flex-1"><span className="flex items-center justify-between gap-2"><span className="truncate text-sm font-medium">{chat.name}</span><span className="text-[10px] text-muted-foreground">{chat.time}</span></span><span className="flex items-center justify-between gap-2"><span className="truncate text-xs text-muted-foreground">{chat.text}</span>{chat.unread > 0 && <span className="grid size-4 place-items-center rounded-full bg-primary text-[9px] text-primary-foreground">{chat.unread}</span>}</span></span></button>)}</div>
+              <div className="mx-4 mt-8 rounded-2xl border border-border bg-muted/40 p-3"><div className="mb-2 flex items-center gap-2 text-xs font-medium"><Wifi className="size-3.5 text-emerald-600" /> 2 devices synced</div><p className="text-[11px] leading-relaxed text-muted-foreground">Your messages, files and calls stay yours. No passwords. No third-party account.</p><button onClick={() => setShowLink(true)} className="mt-3 text-[11px] font-medium text-foreground underline underline-offset-4">Manage devices</button></div>
+            </div>
+
+            <section className="flex min-w-0 flex-1 flex-col">
+              <div className="flex h-[68px] items-center justify-between border-b border-border px-4 sm:px-6"><div className="flex items-center gap-3"><Avatar initials="MC" color="bg-amber-200 text-amber-900" online /><div><h2 className="text-sm font-semibold">{activeChat}</h2><p className="text-[11px] text-muted-foreground">online · messages are encrypted</p></div></div><div className="flex items-center gap-1"><button className="rounded-lg p-2 text-muted-foreground hover:bg-accent"><Phone className="size-4" /></button><button className="rounded-lg p-2 text-muted-foreground hover:bg-accent"><Video className="size-4" /></button><button className="rounded-lg p-2 text-muted-foreground hover:bg-accent"><MoreHorizontal className="size-4" /></button></div></div>
+              <div className="flex min-h-0 flex-1 flex-col justify-end gap-4 overflow-auto p-4 sm:p-6"><div className="mx-auto flex items-center gap-2 rounded-full border border-border bg-muted/40 px-3 py-1.5 text-[10px] text-muted-foreground"><ShieldCheck className="size-3 text-emerald-600" /> Messages are end-to-end encrypted</div>{messages.map((message, index) => <div key={`${message.text}-${index}`} className={`flex items-end gap-2 ${message.from === 'me' ? 'justify-end' : ''}`}>{message.from === 'them' && <Avatar initials="MC" color="bg-amber-200 text-amber-900" small />}<div className={`max-w-[78%] rounded-2xl px-4 py-3 text-sm ${message.from === 'me' ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md bg-muted'}`}><p>{message.text}</p><div className={`mt-1.5 flex items-center justify-end gap-1 text-[10px] ${message.from === 'me' ? 'text-primary-foreground/65' : 'text-muted-foreground'}`}>{message.time}{message.from === 'me' && <Check className="size-3" />}</div></div></div>)}</div>
+              <div className="border-t border-border p-4 sm:p-5"><div className="flex items-end gap-2 rounded-2xl border border-border bg-muted/30 p-2 focus-within:ring-2 focus-within:ring-ring/20"><button className="rounded-xl p-2 text-muted-foreground hover:bg-accent"><Paperclip className="size-4" /></button><textarea value={draft} onChange={(event) => setDraft(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing && event.keyCode !== 229) { event.preventDefault(); sendMessage() } }} rows={1} placeholder="Write a message…" className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm outline-none placeholder:text-muted-foreground" /><button className="rounded-xl p-2 text-muted-foreground hover:bg-accent"><Mic className="size-4" /></button><button onClick={sendMessage} aria-label="Send message" className="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground transition-transform hover:scale-105"><Send className="size-4" /></button></div><p className="mt-2 text-center text-[10px] text-muted-foreground">Free forever · No ads · No tracking</p></div>
+            </section>
+          </div>
+        </section>
+
+        {showAgent && <aside className="hidden w-[284px] shrink-0 border-l border-border bg-muted/20 xl:flex xl:flex-col"><div className="flex items-center justify-between border-b border-border px-5 py-5"><div className="flex items-center gap-2"><div className="grid size-8 place-items-center rounded-xl bg-violet-100 text-violet-700"><Sparkles className="size-4" /></div><div><p className="text-sm font-semibold">Luma agent</p><p className="text-[10px] text-emerald-600">Running locally · WebGPU</p></div></div><button onClick={() => setShowAgent(false)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div><div className="flex-1 p-5"><div className="rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 p-4 dark:from-violet-950/30 dark:to-indigo-950/30"><p className="text-sm font-medium leading-relaxed">“I’m here whenever you need me. Your data never leaves this device.”</p><div className="mt-3 flex items-center gap-1.5 text-[10px] text-violet-700 dark:text-violet-300"><Zap className="size-3" /> Private by design</div></div><p className="mb-3 mt-7 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Suggested for you</p><div className="flex flex-col gap-2"><button className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left text-xs hover:bg-accent"><CalendarDays className="size-4 text-muted-foreground" /><span><span className="block font-medium">Plan my week</span><span className="text-[10px] text-muted-foreground">Organize your calendar</span></span></button><button className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left text-xs hover:bg-accent"><ListTodo className="size-4 text-muted-foreground" /><span><span className="block font-medium">Triage my tasks</span><span className="text-[10px] text-muted-foreground">4 items need attention</span></span></button><button className="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left text-xs hover:bg-accent"><GalleryHorizontalEnd className="size-4 text-muted-foreground" /><span><span className="block font-medium">Find a memory</span><span className="text-[10px] text-muted-foreground">Search your timeline</span></span></button></div></div><div className="border-t border-border p-5"><button className="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card py-2.5 text-xs font-medium hover:bg-accent"><MessageCircle className="size-3.5" /> Ask Luma anything</button></div></aside>}
+      </div>
+
+      {showLink && <div className="fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm"><div role="dialog" aria-modal="true" className="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl"><div className="flex items-start justify-between"><div><p className="text-lg font-semibold">Link a device</p><p className="mt-1 text-sm text-muted-foreground">Use your phone to securely add another device.</p></div><button onClick={() => setShowLink(false)} className="rounded-lg p-1.5 text-muted-foreground hover:bg-accent"><X className="size-4" /></button></div><div className="mx-auto my-7 grid size-44 place-items-center rounded-2xl border-8 border-muted bg-background"><QrCode className="size-28 text-foreground" /></div><div className="rounded-xl bg-muted/50 p-3 text-center text-xs text-muted-foreground"><KeyRound className="mx-auto mb-2 size-4 text-emerald-600" />This code expires in 04:58 and can only be used once.</div><button onClick={() => setShowLink(false)} className="mt-4 w-full rounded-xl bg-primary py-3 text-sm font-medium text-primary-foreground">Scan with phone</button><p className="mt-3 text-center text-[10px] text-muted-foreground">WebBluetooth handshake · Forward secrecy enabled</p></div></div>}
+    </main>
+  )
+}
