@@ -160,5 +160,8 @@
   body {
     @apply bg-background text-foreground;
     font-family: Arial, Helvetica, sans-serif;
+    height: 100dvh;
+    overflow: hidden;
+    overscroll-behavior: none;
   }
 }

@@ -3,7 +3,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'luma/ — private space for everything',
+  title: 'S — private space for everything',
   description: 'A private, end-to-end encrypted space for your messages, people, plans, memories, and local AI.',
   generator: 'v0.app',
   icons: {
