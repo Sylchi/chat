@@ -1,19 +1,18 @@
-import { CheckCircle2, MonitorSmartphone, RefreshCw, Usb } from 'lucide'
-import type { IconNode } from 'lucide'
-import { esc, icon, type View } from '../dom'
-import { CATEGORY_ORDER, detectAll, type Capability, type DeviceCard, type ScanResult } from '../lib/detect'
+import { CheckCircle2, MonitorSmartphone, RefreshCw, Usb } from '../vendor/icons.js'
+import { esc, icon } from '../dom.js'
+import { CATEGORY_ORDER, detectAll } from '../lib/detect.js'
 
-function sectionHeading(title: string, meta?: string) {
+function sectionHeading(title, meta) {
   return `<div class="mb-3 flex flex-wrap items-center gap-2"><h3 class="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">${esc(title)}</h3>${
     meta ? `<span class="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">${esc(meta)}</span>` : ''
   }</div>`
 }
 
-function statTile(label: string, value: string, iconNode: IconNode) {
+function statTile(label, value, iconNode) {
   return `<div class="flex items-center gap-3 rounded-2xl border border-border bg-card p-4"><div class="grid size-10 shrink-0 place-items-center rounded-xl bg-muted">${icon(iconNode, 'size-4.5 text-muted-foreground')}</div><div class="min-w-0"><p class="text-lg font-semibold leading-tight">${esc(value)}</p><p class="text-xs text-muted-foreground">${esc(label)}</p></div></div>`
 }
 
-function deviceCard(device: DeviceCard, wide = false) {
+function deviceCard(device, wide = false) {
   return `<article class="rounded-2xl border border-border bg-card p-4 ${wide ? 'sm:col-span-2' : ''}">
     <div class="flex items-start gap-3">
       <div class="grid size-9 shrink-0 place-items-center rounded-xl bg-muted">${icon(device.icon, 'size-4 text-muted-foreground')}</div>
@@ -31,7 +30,7 @@ function deviceCard(device: DeviceCard, wide = false) {
   </article>`
 }
 
-function capabilityCard(capability: Capability) {
+function capabilityCard(capability) {
   return `<div class="flex items-start gap-2.5 rounded-2xl border border-border bg-card p-3">
     <span class="mt-1.5 size-2 shrink-0 rounded-full ${capability.supported ? 'bg-emerald-500' : 'bg-rose-400/60'}"></span>
     <div class="min-w-0 flex-1">
@@ -41,12 +40,12 @@ function capabilityCard(capability: Capability) {
   </div>`
 }
 
-function renderContent(result: ScanResult) {
+function renderContent(result) {
   const current = result.devices.find((device) => device.id === 'current')
   const peripherals = result.devices.filter((device) => device.id !== 'current')
   const capabilities = result.capabilities
   const supportedCount = capabilities.filter((capability) => capability.supported).length
-  const groups = capabilities.reduce<Record<string, Capability[]>>((acc, capability) => {
+  const groups = capabilities.reduce((acc, capability) => {
     ;(acc[capability.category] ??= []).push(capability)
     return acc
   }, {})
@@ -98,14 +97,9 @@ function renderContent(result: ScanResult) {
     </div>`
 }
 
-const state: {
-  scanning: boolean
-  result: ScanResult | null
-  scannedAt: Date | null
-  cleanups: Array<() => void>
-} = { scanning: true, result: null, scannedAt: null, cleanups: [] }
+const state = { scanning: true, result: null, scannedAt: null, cleanups: [] }
 
-export const devicesView: View = {
+export const devicesView = {
   html: () => `
     <div class="flex-1 overflow-auto p-5 sm:p-8">
       <div class="mb-7 flex flex-wrap items-end justify-between gap-4">
@@ -126,12 +120,12 @@ export const devicesView: View = {
       <div id="dev-content"></div>
     </div>`,
   init: (root) => {
-    const scanBtn = root.querySelector<HTMLButtonElement>('#dev-scan')!
-    const scanIcon = root.querySelector<HTMLElement>('#dev-scan-icon')!
-    const scanLabel = root.querySelector<HTMLElement>('#dev-scan-label')!
-    const loading = root.querySelector<HTMLElement>('#dev-loading')!
-    const content = root.querySelector<HTMLElement>('#dev-content')!
-    const scannedAt = root.querySelector<HTMLElement>('#dev-scanned-at')!
+    const scanBtn = root.querySelector('#dev-scan')
+    const scanIcon = root.querySelector('#dev-scan-icon')
+    const scanLabel = root.querySelector('#dev-scan-label')
+    const loading = root.querySelector('#dev-loading')
+    const content = root.querySelector('#dev-content')
+    const scannedAt = root.querySelector('#dev-scanned-at')
 
     const render = () => {
       scanBtn.disabled = state.scanning

@@ -1,9 +1,9 @@
-import { Check, FileImage, Mic, MoreHorizontal, Paperclip, Phone, Send, ShieldCheck, Video } from 'lucide'
-import { batch } from 'nanostores'
-import { avatar, esc, icon, type View } from '../dom'
-import { activeChat, draft, messages, sharedFiles, type Message } from '../store'
+import { Check, FileImage, Mic, MoreHorizontal, Paperclip, Phone, Send, ShieldCheck, Video } from '../vendor/icons.js'
+import { batch } from '../vendor/store.js'
+import { avatar, esc, icon } from '../dom.js'
+import { activeChat, draft, messages, sharedFiles } from '../store.js'
 
-function renderMessage(message: Message) {
+function renderMessage(message) {
   const fromMe = message.from === 'me'
   return `
     <div class="flex items-end gap-2 ${fromMe ? 'justify-end' : ''}">
@@ -39,9 +39,7 @@ function renderChips() {
 async function chooseFiles() {
   try {
     if ('showOpenFilePicker' in window) {
-      const picker = (window as unknown as {
-        showOpenFilePicker: (options?: { multiple?: boolean }) => Promise<FileSystemFileHandle[]>
-      }).showOpenFilePicker.bind(window)
+      const picker = window.showOpenFilePicker.bind(window)
       const handles = await picker({ multiple: true })
       sharedFiles.set(await Promise.all(handles.map((handle) => handle.getFile())))
       return
@@ -52,13 +50,13 @@ async function chooseFiles() {
   document.getElementById('s-file-picker')?.click()
 }
 
-function handleFiles(files: FileList | null) {
+function handleFiles(files) {
   sharedFiles.set(Array.from(files ?? []))
 }
 
-let disposeChat: (() => void) | null = null
+let disposeChat = null
 
-export const chatView: View = {
+export const chatView = {
   html: () => `
     <section class="flex min-w-0 flex-1 flex-col">
       <div class="flex h-[68px] items-center justify-between border-b border-border px-4 sm:px-6">
@@ -91,13 +89,13 @@ export const chatView: View = {
       </div>
     </section>`,
   init: (root) => {
-    const fileInput = root.querySelector<HTMLInputElement>('#s-file-picker')!
-    const attachBtn = root.querySelector<HTMLButtonElement>('[data-role="attach"]')!
-    const sendBtn = root.querySelector<HTMLButtonElement>('[data-role="send"]')!
-    const composer = root.querySelector<HTMLTextAreaElement>('#composer')!
-    const thread = root.querySelector<HTMLElement>('#thread-messages')!
-    const chips = root.querySelector<HTMLElement>('[data-role="chips"]')!
-    const cleanups: Array<() => void> = []
+    const fileInput = root.querySelector('#s-file-picker')
+    const attachBtn = root.querySelector('[data-role="attach"]')
+    const sendBtn = root.querySelector('[data-role="send"]')
+    const composer = root.querySelector('#composer')
+    const thread = root.querySelector('#thread-messages')
+    const chips = root.querySelector('[data-role="chips"]')
+    const cleanups = []
 
     const scrollToBottom = () => {
       thread.scrollTop = thread.scrollHeight
@@ -127,7 +125,7 @@ export const chatView: View = {
       })
     }
     const onInput = () => draft.set(composer.value)
-    const onKeydown = (event: KeyboardEvent) => {
+    const onKeydown = (event) => {
       if (event.key === 'Enter' && !event.shiftKey && !event.isComposing && event.keyCode !== 229) {
         event.preventDefault()
         send()

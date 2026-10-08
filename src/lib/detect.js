@@ -1,18 +1,14 @@
-import { Cable, Camera, Gamepad2, Headphones, Keyboard, Mic, MonitorSmartphone, Speaker, Usb } from 'lucide'
-import type { IconNode } from 'lucide'
-
-export type Capability = { category: string; name: string; supported: boolean; detail?: string }
-
-export type DeviceCard = {
-  id: string
-  title: string
-  subtitle: string
-  icon: IconNode
-  badge?: { text: string; tone: 'ok' | 'muted' }
-  meta: { label: string; value: string }[]
-}
-
-export type ScanResult = { capabilities: Capability[]; devices: DeviceCard[] }
+import {
+  Cable,
+  Camera,
+  Gamepad2,
+  Headphones,
+  Keyboard,
+  Mic,
+  MonitorSmartphone,
+  Speaker,
+  Usb,
+} from '../vendor/icons.js'
 
 export const CATEGORY_ORDER = [
   'Compute & graphics',
@@ -25,19 +21,19 @@ export const CATEGORY_ORDER = [
   'System',
 ]
 
-function formatBytes(bytes: number) {
+function formatBytes(bytes) {
   if (!bytes) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
   const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
   return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`
 }
 
-function hexId(id?: number | null) {
+function hexId(id) {
   return id == null ? '—' : `0x${id.toString(16).padStart(4, '0')}`
 }
 
-function prettyPlatform(platform: string) {
-  const map: Record<string, string> = {
+function prettyPlatform(platform) {
+  const map = {
     Win32: 'Windows',
     Win64: 'Windows',
     MacIntel: 'macOS',
@@ -50,10 +46,7 @@ function prettyPlatform(platform: string) {
   return map[platform] ?? platform
 }
 
-function detectBrowser(
-  userAgentData: { brands?: { brand: string; version: string }[] } | undefined,
-  userAgent: string,
-) {
+function detectBrowser(userAgentData, userAgent) {
   const brands = userAgentData?.brands ?? []
   const match = brands.find(
     (entry) => /chrom|edge|firefox|safari|opera/i.test(entry.brand) && !/not.?a.?brand/i.test(entry.brand),
@@ -70,26 +63,25 @@ function detectBrowser(
   return 'Unknown browser'
 }
 
-async function permissionState(name: string) {
+async function permissionState(name) {
   try {
-    const status = await navigator.permissions.query({ name } as unknown as PermissionDescriptor)
+    const status = await navigator.permissions.query({ name })
     return status.state
   } catch {
     return undefined
   }
 }
 
-export async function detectAll(): Promise<ScanResult> {
-  const w = window as any
-  const nav = navigator as any
-  const capabilities: Capability[] = []
-  const devices: DeviceCard[] = []
-  const add = (category: string, name: string, supported: boolean, detail?: string) =>
-    capabilities.push({ category, name, supported, detail })
+export async function detectAll() {
+  const w = window
+  const nav = navigator
+  const capabilities = []
+  const devices = []
+  const add = (category, name, supported, detail) => capabilities.push({ category, name, supported, detail })
 
   add('Compute & graphics', 'WebAssembly', typeof WebAssembly !== 'undefined')
   add('Compute & graphics', 'Web Workers', typeof Worker !== 'undefined')
-  let webgl: string | undefined
+  let webgl
   try {
     const canvas = document.createElement('canvas')
     webgl = canvas.getContext('webgl2') ? 'WebGL 2' : canvas.getContext('webgl') ? 'WebGL 1' : undefined
@@ -98,7 +90,7 @@ export async function detectAll(): Promise<ScanResult> {
   }
   add('Compute & graphics', 'WebGL', Boolean(webgl), webgl)
   let gpuSupported = 'gpu' in nav
-  let gpuDetail: string | undefined
+  let gpuDetail
   if (gpuSupported) {
     try {
       const adapter = await nav.gpu.requestAdapter()
@@ -118,7 +110,7 @@ export async function detectAll(): Promise<ScanResult> {
   add('Compute & graphics', 'WebCodecs', 'VideoEncoder' in w && 'VideoDecoder' in w)
   const hasAudioContext = typeof w.AudioContext !== 'undefined' || typeof w.webkitAudioContext !== 'undefined'
   add('Compute & graphics', 'Web Audio API', hasAudioContext)
-  let xrDetail: string | undefined
+  let xrDetail
   const hasXr = 'xr' in nav
   if (hasXr && typeof nav.xr.isSessionSupported === 'function') {
     try {
@@ -178,7 +170,7 @@ export async function detectAll(): Promise<ScanResult> {
   const micPerm = canGetUserMedia ? await permissionState('microphone') : undefined
   add('Media', 'Camera & microphone capture', canGetUserMedia, canGetUserMedia ? `camera ${cameraPerm ?? 'prompt'} · mic ${micPerm ?? 'prompt'}` : undefined)
   add('Media', 'Screen capture', typeof media.getDisplayMedia === 'function')
-  const mediaDevices: MediaDeviceInfo[] = typeof media.enumerateDevices === 'function' ? await media.enumerateDevices().catch(() => []) : []
+  const mediaDevices = typeof media.enumerateDevices === 'function' ? await media.enumerateDevices().catch(() => []) : []
   add('Media', 'Device enumeration', mediaDevices.length > 0 || typeof media.enumerateDevices === 'function', mediaDevices.length ? `${mediaDevices.length} device${mediaDevices.length === 1 ? '' : 's'} reported` : 'No devices reported yet')
   add('Media', 'Media Capabilities API', 'mediaCapabilities' in nav)
   add('Media', 'Web MIDI', 'requestMIDIAccess' in nav)
@@ -204,7 +196,7 @@ export async function detectAll(): Promise<ScanResult> {
 
   add('Security', 'Web Crypto', Boolean(nav.crypto?.subtle), nav.crypto?.subtle ? 'AES-GCM, RSA, ECDSA available' : 'Requires a secure context')
   const hasWebAuthn = 'PublicKeyCredential' in w
-  let passkeyDetail: string | undefined
+  let passkeyDetail
   if (hasWebAuthn && typeof w.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function') {
     try {
       const available = await w.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable()
@@ -218,7 +210,7 @@ export async function detectAll(): Promise<ScanResult> {
   add('Security', 'Permissions API', 'permissions' in nav)
 
   add('Storage', 'File System Access', 'showOpenFilePicker' in w)
-  let storageDetail: string | undefined
+  let storageDetail
   if (nav.storage?.estimate) {
     try {
       const { usage = 0, quota = 0 } = await nav.storage.estimate()
@@ -231,7 +223,7 @@ export async function detectAll(): Promise<ScanResult> {
   add('Storage', 'IndexedDB', typeof w.indexedDB !== 'undefined')
   add('Storage', 'Cache API', 'caches' in w)
 
-  let batteryDetail: string | undefined
+  let batteryDetail
   const hasBattery = typeof nav.getBattery === 'function'
   if (hasBattery) {
     try {
@@ -271,7 +263,7 @@ export async function detectAll(): Promise<ScanResult> {
     ],
   })
 
-  const counts: Record<string, number> = { videoinput: 0, audioinput: 0, audiooutput: 0 }
+  const counts = { videoinput: 0, audioinput: 0, audiooutput: 0 }
   for (const device of mediaDevices) {
     if (!(device.kind in counts)) continue
     counts[device.kind] += 1
@@ -299,7 +291,7 @@ export async function detectAll(): Promise<ScanResult> {
     })
   }
 
-  pads.forEach((pad: any, index: number) => {
+  pads.forEach((pad, index) => {
     if (!pad) return
     devices.push({
       id: `gamepad-${index}`,
@@ -315,7 +307,7 @@ export async function detectAll(): Promise<ScanResult> {
     })
   })
 
-  usbDevices.forEach((device: any, index: number) => {
+  usbDevices.forEach((device, index) => {
     devices.push({
       id: `usb-${index}`,
       title: device.productName || device.manufacturerName || `USB device ${index + 1}`,
@@ -330,7 +322,7 @@ export async function detectAll(): Promise<ScanResult> {
     })
   })
 
-  hidDevices.forEach((device: any, index: number) => {
+  hidDevices.forEach((device, index) => {
     devices.push({
       id: `hid-${index}`,
       title: device.productName || `HID device ${index + 1}`,

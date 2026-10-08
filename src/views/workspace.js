@@ -22,11 +22,11 @@ import {
   Wifi,
   X,
   Zap,
-} from 'lucide'
-import { avatar, esc, icon, type View } from '../dom'
-import { chatView } from './chat'
-import { calendarView, contactsView, galleryView, tasksView, timelineView } from './panels'
-import { devicesView } from './devices'
+} from '../vendor/icons.js'
+import { avatar, esc, icon } from '../dom.js'
+import { chatView } from './chat.js'
+import { calendarView, contactsView, galleryView, tasksView, timelineView } from './panels.js'
+import { devicesView } from './devices.js'
 import {
   activeChat,
   activeNav,
@@ -35,7 +35,7 @@ import {
   showAgent,
   showAuth,
   showLink,
-} from '../store'
+} from '../store.js'
 
 const navItems = [
   { label: 'Inbox', icon: MessageCircle, count: 3 },
@@ -54,7 +54,7 @@ const chats = [
   { name: 'Saved messages', initials: 'SM', color: 'bg-muted text-muted-foreground', text: 'Your private notes', time: '', unread: 0, online: false },
 ]
 
-const REGIONS: Record<string, View> = {
+const REGIONS = {
   Inbox: chatView,
   Contacts: contactsView,
   Devices: devicesView,
@@ -87,7 +87,7 @@ async function authenticate() {
   }
 }
 
-function navButton(item: (typeof navItems)[number]) {
+function navButton(item) {
   const active = item.label === activeNav.get()
   return `<button data-nav="${esc(item.label)}" data-side-row="btn" data-side-title="${esc(item.label)}" class="flex items-center gap-3 rounded-xl py-2.5 text-sm transition-colors px-3 ${
     active ? 'bg-primary text-primary-foreground shadow-sm' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -98,7 +98,7 @@ function navButton(item: (typeof navItems)[number]) {
   </button>`
 }
 
-function mobileNavButton(item: (typeof navItems)[number]) {
+function mobileNavButton(item) {
   const active = item.label === activeNav.get()
   return `<button data-nav="${esc(item.label)}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm ${
     active ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent hover:text-foreground'
@@ -109,14 +109,14 @@ function mobileNavButton(item: (typeof navItems)[number]) {
   </button>`
 }
 
-function bottomButton(label: string, custom: string, iconNode: (typeof navItems)[number]['icon']) {
+function bottomButton(label, custom, iconNode) {
   return `<button data-nav-custom="${custom}" data-side-row="btn" data-side-title="${esc(label)}" class="flex items-center gap-3 rounded-xl py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground px-3">
     ${icon(iconNode)}
     <span data-side-hide>${esc(label)}</span>
   </button>`
 }
 
-function chatButton(chat: (typeof chats)[number]) {
+function chatButton(chat) {
   const active = chat.name === activeChat.get()
   return `<button data-chat="${esc(chat.name)}" class="flex items-center gap-3 rounded-xl p-3 text-left ${active ? 'bg-accent' : 'hover:bg-muted/60'}">
     ${avatar(chat.initials, chat.color, chat.online)}
@@ -127,7 +127,7 @@ function chatButton(chat: (typeof chats)[number]) {
   </button>`
 }
 
-export function initWorkspace(root: HTMLElement) {
+export function initWorkspace(root) {
   root.innerHTML = `
     <main class="h-dvh overflow-hidden bg-background p-3 text-foreground sm:p-5 lg:p-7">
       <div class="mx-auto flex h-full max-w-[1480px] overflow-hidden rounded-[28px] border border-border/70 bg-card shadow-[0_24px_80px_-35px_rgba(15,23,42,0.35)]">
@@ -259,36 +259,36 @@ export function initWorkspace(root: HTMLElement) {
     </main>
   `
 
-  const sidebar = root.querySelector<HTMLElement>('[data-desktop-sidebar]')!
-  const region = root.querySelector<HTMLElement>('[data-role="region"]')!
-  const agentRail = root.querySelector<HTMLElement>('#agent-rail')!
-  const authModal = root.querySelector<HTMLElement>('[data-modal="auth"]')!
-  const linkModal = root.querySelector<HTMLElement>('[data-modal="link"]')!
-  const mobileNav = root.querySelector<HTMLElement>('[data-mobile-sidebar]')!
-  const mobileOverlay = root.querySelector<HTMLElement>('[data-mobile-overlay]')!
+  const sidebar = root.querySelector('[data-desktop-sidebar]')
+  const region = root.querySelector('[data-role="region"]')
+  const agentRail = root.querySelector('#agent-rail')
+  const authModal = root.querySelector('[data-modal="auth"]')
+  const linkModal = root.querySelector('[data-modal="link"]')
+  const mobileNav = root.querySelector('[data-mobile-sidebar]')
+  const mobileOverlay = root.querySelector('[data-mobile-overlay]')
 
-  function applyCollapsed(collapsed: boolean) {
+  function applyCollapsed(collapsed) {
     sidebar.classList.toggle('w-[72px]', collapsed)
     sidebar.classList.toggle('w-[236px]', !collapsed)
-    for (const node of sidebar.querySelectorAll<HTMLElement>('[data-side-row="logo"]')) {
+    for (const node of sidebar.querySelectorAll('[data-side-row="logo"]')) {
       node.classList.toggle('justify-center', collapsed)
       node.classList.toggle('px-2', !collapsed)
     }
-    for (const node of sidebar.querySelectorAll<HTMLElement>('[data-side-row="profile"]')) {
+    for (const node of sidebar.querySelectorAll('[data-side-row="profile"]')) {
       node.classList.toggle('justify-center', collapsed)
     }
-    for (const node of sidebar.querySelectorAll<HTMLElement>('[data-side-row="btn"]')) {
+    for (const node of sidebar.querySelectorAll('[data-side-row="btn"]')) {
       node.classList.toggle('justify-center', collapsed)
       node.classList.toggle('px-2', collapsed)
       node.classList.toggle('px-3', !collapsed)
     }
-    for (const node of sidebar.querySelectorAll<HTMLElement>('[data-side-hide]')) {
+    for (const node of sidebar.querySelectorAll('[data-side-hide]')) {
       node.classList.toggle('hidden', collapsed)
     }
-    for (const node of sidebar.querySelectorAll<HTMLElement>('[data-side-title]')) {
+    for (const node of sidebar.querySelectorAll('[data-side-title]')) {
       node.title = collapsed ? (node.dataset.sideTitle ?? '') : ''
     }
-    const collapseBtn = sidebar.querySelector<HTMLButtonElement>('[data-role="collapse"]')
+    const collapseBtn = sidebar.querySelector('[data-role="collapse"]')
     if (collapseBtn) {
       const label = collapsed ? 'Expand sidebar' : 'Collapse sidebar'
       collapseBtn.title = label
@@ -298,7 +298,7 @@ export function initWorkspace(root: HTMLElement) {
 
   function syncNav() {
     const current = activeNav.get()
-    for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-nav]')) {
+    for (const btn of document.querySelectorAll('[data-nav]')) {
       const active = btn.dataset.nav === current
       const isMobile = btn.closest('[data-nav-root="mobile"]') != null
       btn.classList.toggle('bg-primary', active)
@@ -307,7 +307,7 @@ export function initWorkspace(root: HTMLElement) {
       btn.classList.toggle('text-muted-foreground', !active)
       btn.classList.toggle('hover:bg-accent', !active)
       btn.classList.toggle('hover:text-foreground', !active)
-      const badge = btn.querySelector<HTMLElement>('[data-nav-count]')
+      const badge = btn.querySelector('[data-nav-count]')
       if (badge && !isMobile) {
         badge.classList.toggle('bg-primary-foreground/15', active)
         badge.classList.toggle('text-primary-foreground', active)
@@ -321,7 +321,7 @@ export function initWorkspace(root: HTMLElement) {
 
   function syncChatList() {
     const current = activeChat.get()
-    for (const btn of document.querySelectorAll<HTMLButtonElement>('[data-chat]')) {
+    for (const btn of document.querySelectorAll('[data-chat]')) {
       const active = btn.dataset.chat === current
       btn.classList.toggle('bg-accent', active)
       btn.classList.toggle('hover:bg-muted/60', !active)
@@ -330,13 +330,13 @@ export function initWorkspace(root: HTMLElement) {
     if (title) title.textContent = current
   }
 
-  function applyMobile(open: boolean) {
+  function applyMobile(open) {
     mobileOverlay.classList.toggle('hidden', !open)
     mobileNav.classList.toggle('-translate-x-full', !open)
     mobileNav.classList.toggle('translate-x-0', open)
   }
 
-  let activeRegion: View | null = null
+  let activeRegion = null
   function renderRegion() {
     activeRegion?.destroy?.()
     const view = REGIONS[activeNav.get()] ?? chatView
@@ -346,8 +346,8 @@ export function initWorkspace(root: HTMLElement) {
   }
 
   sidebar.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement
-    const button = target.closest<HTMLElement>('[data-role="collapse"], [data-nav], [data-nav-custom]')
+    const target = event.target
+    const button = target.closest('[data-role="collapse"], [data-nav], [data-nav-custom]')
     if (!button || !sidebar.contains(button)) return
     if (button.dataset.role === 'collapse') {
       sidebarCollapsed.set(!sidebarCollapsed.get())
@@ -363,8 +363,8 @@ export function initWorkspace(root: HTMLElement) {
   })
 
   mobileNav.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement
-    const button = target.closest<HTMLElement>('[data-nav], [data-nav-custom]')
+    const target = event.target
+    const button = target.closest('[data-nav], [data-nav-custom]')
     if (!button) return
     const custom = button.dataset.navCustom
     if (button.dataset.nav || custom === 'link') mobileSidebarOpen.set(false)
@@ -373,29 +373,29 @@ export function initWorkspace(root: HTMLElement) {
   })
 
   mobileOverlay.addEventListener('click', () => mobileSidebarOpen.set(false))
-  mobileNav.querySelector('[data-mobile-close]')!.addEventListener('click', () => mobileSidebarOpen.set(false))
-  root.querySelector('[data-role="menu"]')!.addEventListener('click', () => mobileSidebarOpen.set(true))
+  mobileNav.querySelector('[data-mobile-close]').addEventListener('click', () => mobileSidebarOpen.set(false))
+  root.querySelector('[data-role="menu"]').addEventListener('click', () => mobileSidebarOpen.set(true))
 
   const chatList = root.querySelector('[data-chat-list]')
   chatList?.addEventListener('click', (event) => {
-    const target = event.target as HTMLElement
-    const chatBtn = target.closest<HTMLElement>('[data-chat]')
+    const target = event.target
+    const chatBtn = target.closest('[data-chat]')
     if (chatBtn) {
       activeChat.set(chatBtn.dataset.chat ?? '')
       return
     }
-    const devicesBtn = target.closest<HTMLElement>('[data-nav-custom="devices"]')
+    const devicesBtn = target.closest('[data-nav-custom="devices"]')
     if (devicesBtn) activeNav.set('Devices')
   })
 
-  agentRail.querySelector('[data-agent-close]')!.addEventListener('click', () => showAgent.set(false))
+  agentRail.querySelector('[data-agent-close]').addEventListener('click', () => showAgent.set(false))
 
-  authModal.querySelector('[data-auth-close]')!.addEventListener('click', () => showAuth.set(false))
-  authModal.querySelector('[data-auth-key]')!.addEventListener('click', () => showAuth.set(false))
-  authModal.querySelector('[data-auth-platform]')!.addEventListener('click', () => void authenticate())
+  authModal.querySelector('[data-auth-close]').addEventListener('click', () => showAuth.set(false))
+  authModal.querySelector('[data-auth-key]').addEventListener('click', () => showAuth.set(false))
+  authModal.querySelector('[data-auth-platform]').addEventListener('click', () => void authenticate())
 
-  linkModal.querySelector('[data-link-close]')!.addEventListener('click', () => showLink.set(false))
-  linkModal.querySelector('[data-link-scan]')!.addEventListener('click', () => showLink.set(false))
+  linkModal.querySelector('[data-link-close]').addEventListener('click', () => showLink.set(false))
+  linkModal.querySelector('[data-link-scan]').addEventListener('click', () => showLink.set(false))
 
   window.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return

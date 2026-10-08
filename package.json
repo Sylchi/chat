@@ -5,20 +5,15 @@
   "packageManager": "pnpm@12.3.4",
   "type": "module",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "start": "vite preview",
-    "typecheck": "tsc --noEmit"
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/build.mjs",
+    "start": "python3 -m http.server 5173 --directory out"
   },
   "devDependencies": {
-    "@tailwindcss/vite": "^4.3.3",
-    "@types/node": "^24",
-    "tailwindcss": "^4.3.3",
-    "typescript": "5.7.3",
-    "vite": "^8.3.3"
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
   },
-  "dependencies": {
-    "lucide": "^1.52.0",
-    "nanostores": "^1.5.5"
+  "pnpm": {
+    "onlyBuiltDependencies": ["@parcel/watcher"]
   }
 }

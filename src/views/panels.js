@@ -1,6 +1,6 @@
-import { CalendarDays, Clock3, GalleryHorizontalEnd, ListTodo } from 'lucide'
-import { avatar, esc, icon, type View } from '../dom'
-import { activeChat, activeNav, completedTasks } from '../store'
+import { CalendarDays, Clock3, GalleryHorizontalEnd, ListTodo } from '../vendor/icons.js'
+import { avatar, esc, icon } from '../dom.js'
+import { activeChat, activeNav, completedTasks } from '../store.js'
 
 const contacts = [
   { name: 'Maya Chen', id: 's_mc_7F2K', initials: 'MC', color: 'bg-amber-200 text-amber-900', status: 'Online now' },
@@ -16,7 +16,7 @@ const TASKS = [
   'Review privacy settings',
 ]
 
-export const contactsView: View = {
+export const contactsView = {
   html: () => `
     <div class="flex-1 overflow-auto p-5 sm:p-8">
       <div class="mb-7 flex items-end justify-between">
@@ -47,7 +47,7 @@ export const contactsView: View = {
       </div>
     </div>`,
   init: (root) => {
-    for (const button of root.querySelectorAll<HTMLButtonElement>('[data-message-contact]')) {
+    for (const button of root.querySelectorAll('[data-message-contact]')) {
       button.addEventListener('click', () => {
         activeChat.set(button.dataset.messageContact ?? '')
         activeNav.set('Inbox')
@@ -56,7 +56,7 @@ export const contactsView: View = {
   },
 }
 
-export const calendarView: View = {
+export const calendarView = {
   html: () => `
     <div class="flex-1 overflow-auto p-5 sm:p-8">
       <div class="mb-6 flex items-center justify-between">
@@ -88,7 +88,7 @@ export const calendarView: View = {
     </div>`,
 }
 
-export const tasksView: View = {
+export const tasksView = {
   html: () => `
     <div class="flex-1 overflow-auto p-5 sm:p-8">
       <div class="mb-6 flex items-center justify-between">
@@ -106,7 +106,7 @@ export const tasksView: View = {
       if (list) list.innerHTML = renderTasks()
     })
     root.querySelector('#tasks-list')?.addEventListener('change', (event) => {
-      const input = (event.target as HTMLElement).closest<HTMLInputElement>('input[data-task]')
+      const input = event.target.closest('input[data-task]')
       if (!input) return
       const task = input.dataset.task ?? ''
       const current = completedTasks.get()
@@ -127,7 +127,7 @@ function renderTasks() {
   ).join('')
 }
 
-export const galleryView: View = {
+export const galleryView = {
   html: () => `
     <div class="flex-1 overflow-auto p-5 sm:p-8">
       <div class="mb-6">
@@ -136,16 +136,7 @@ export const galleryView: View = {
         <p class="mt-1 text-sm text-muted-foreground">Shared moments, kept private</p>
       </div>
       <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        ${(
-          [
-            'Saturday light',
-            'Maya · portrait set',
-            'Design crew · final deck',
-            'Weekend notes',
-            'Golden hour',
-            'Shared references',
-          ] as const
-        )
+        ${['Saturday light', 'Maya · portrait set', 'Design crew · final deck', 'Weekend notes', 'Golden hour', 'Shared references']
           .map(
             (item, index) => `
               <div class="flex aspect-square items-end rounded-2xl border border-border p-4 ${['bg-amber-100', 'bg-sky-100', 'bg-violet-100', 'bg-emerald-100', 'bg-rose-100', 'bg-orange-100'][index]}">
@@ -157,7 +148,7 @@ export const galleryView: View = {
     </div>`,
 }
 
-export const timelineView: View = {
+export const timelineView = {
   html: () => `
     <div class="flex-1 overflow-auto p-5 sm:p-8">
       <div class="mb-6">
@@ -166,14 +157,7 @@ export const timelineView: View = {
         <p class="mt-1 text-sm text-muted-foreground">A private record of your life in S</p>
       </div>
       <div class="flex flex-col gap-3">
-        ${(
-          [
-            'New photo set added to Gallery',
-            'Maya replied to your message',
-            'Task completed: Review privacy settings',
-            'Device synced via WebBluetooth',
-          ] as const
-        )
+        ${['New photo set added to Gallery', 'Maya replied to your message', 'Task completed: Review privacy settings', 'Device synced via WebBluetooth']
           .map(
             (item) => `
               <div class="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
