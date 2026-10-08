@@ -1,36 +1,20 @@
-'use client'
+import { Cable, Camera, Gamepad2, Headphones, Keyboard, Mic, MonitorSmartphone, Speaker, Usb } from 'lucide'
+import type { IconNode } from 'lucide'
 
-import { useCallback, useEffect, useState } from 'react'
-import type { LucideIcon } from 'lucide-react'
-import {
-  Cable,
-  Camera,
-  CheckCircle2,
-  Cpu,
-  Gamepad2,
-  Headphones,
-  Keyboard,
-  Mic,
-  MonitorSmartphone,
-  RefreshCw,
-  Speaker,
-  Usb,
-} from 'lucide-react'
+export type Capability = { category: string; name: string; supported: boolean; detail?: string }
 
-type Capability = { category: string; name: string; supported: boolean; detail?: string }
-
-type DeviceCard = {
+export type DeviceCard = {
   id: string
   title: string
   subtitle: string
-  icon: LucideIcon
+  icon: IconNode
   badge?: { text: string; tone: 'ok' | 'muted' }
   meta: { label: string; value: string }[]
 }
 
-type ScanResult = { capabilities: Capability[]; devices: DeviceCard[] }
+export type ScanResult = { capabilities: Capability[]; devices: DeviceCard[] }
 
-const CATEGORY_ORDER = [
+export const CATEGORY_ORDER = [
   'Compute & graphics',
   'Connectivity',
   'Media',
@@ -66,9 +50,14 @@ function prettyPlatform(platform: string) {
   return map[platform] ?? platform
 }
 
-function detectBrowser(userAgentData: { brands?: { brand: string; version: string }[] } | undefined, userAgent: string) {
+function detectBrowser(
+  userAgentData: { brands?: { brand: string; version: string }[] } | undefined,
+  userAgent: string,
+) {
   const brands = userAgentData?.brands ?? []
-  const match = brands.find((entry) => /chrom|edge|firefox|safari|opera/i.test(entry.brand) && !/not.?a.?brand/i.test(entry.brand))
+  const match = brands.find(
+    (entry) => /chrom|edge|firefox|safari|opera/i.test(entry.brand) && !/not.?a.?brand/i.test(entry.brand),
+  )
   if (match) {
     const name = match.brand.replace(/\b\w/g, (letter) => letter.toUpperCase())
     return `${name} ${match.version.split('.')[0]}`
@@ -90,7 +79,7 @@ async function permissionState(name: string) {
   }
 }
 
-async function detectAll(): Promise<ScanResult> {
+export async function detectAll(): Promise<ScanResult> {
   const w = window as any
   const nav = navigator as any
   const capabilities: Capability[] = []
@@ -98,7 +87,6 @@ async function detectAll(): Promise<ScanResult> {
   const add = (category: string, name: string, supported: boolean, detail?: string) =>
     capabilities.push({ category, name, supported, detail })
 
-  // Compute & graphics
   add('Compute & graphics', 'WebAssembly', typeof WebAssembly !== 'undefined')
   add('Compute & graphics', 'Web Workers', typeof Worker !== 'undefined')
   let webgl: string | undefined
@@ -146,7 +134,6 @@ async function detectAll(): Promise<ScanResult> {
   }
   add('Compute & graphics', 'WebXR', hasXr, xrDetail)
 
-  // Connectivity
   add('Connectivity', 'Web Bluetooth', 'bluetooth' in nav, 'bluetooth' in nav ? 'Pairing asks for permission on demand' : undefined)
   const usbDevices = nav.usb?.getDevices ? await nav.usb.getDevices().catch(() => []) : []
   add(
@@ -185,7 +172,6 @@ async function detectAll(): Promise<ScanResult> {
   add('Connectivity', 'WebSocket', typeof w.WebSocket !== 'undefined')
   add('Connectivity', 'Web Share', typeof nav.share === 'function')
 
-  // Media
   const media = nav.mediaDevices ?? {}
   const canGetUserMedia = typeof media.getUserMedia === 'function'
   const cameraPerm = canGetUserMedia ? await permissionState('camera') : undefined
@@ -199,7 +185,6 @@ async function detectAll(): Promise<ScanResult> {
   add('Media', 'Speech recognition', 'SpeechRecognition' in w || 'webkitSpeechRecognition' in w)
   add('Media', 'Speech synthesis', 'speechSynthesis' in nav)
 
-  // Sensors
   add('Sensors', 'Accelerometer', 'Accelerometer' in w)
   add('Sensors', 'Gyroscope', 'Gyroscope' in w)
   add('Sensors', 'Magnetometer', 'Magnetometer' in w)
@@ -210,7 +195,6 @@ async function detectAll(): Promise<ScanResult> {
   add('Sensors', 'Geolocation', 'geolocation' in nav, geoPerm ? `permission: ${geoPerm}` : undefined)
   add('Sensors', 'Vibration', typeof nav.vibrate === 'function')
 
-  // Input
   const touchPoints = nav.maxTouchPoints ?? 0
   add('Input', 'Touch input', touchPoints > 0, touchPoints > 0 ? `${touchPoints} touch points` : 'No touch surface reported')
   const pads = typeof nav.getGamepads === 'function' ? Array.from(nav.getGamepads() ?? []).filter(Boolean) : []
@@ -218,7 +202,6 @@ async function detectAll(): Promise<ScanResult> {
   add('Input', 'Pointer events', typeof w.PointerEvent !== 'undefined')
   add('Input', 'Clipboard access', Boolean(nav.clipboard))
 
-  // Security
   add('Security', 'Web Crypto', Boolean(nav.crypto?.subtle), nav.crypto?.subtle ? 'AES-GCM, RSA, ECDSA available' : 'Requires a secure context')
   const hasWebAuthn = 'PublicKeyCredential' in w
   let passkeyDetail: string | undefined
@@ -234,7 +217,6 @@ async function detectAll(): Promise<ScanResult> {
   add('Security', 'Secure context', w.isSecureContext, w.isSecureContext ? window.location.protocol : 'Not HTTPS — many APIs are disabled')
   add('Security', 'Permissions API', 'permissions' in nav)
 
-  // Storage
   add('Storage', 'File System Access', 'showOpenFilePicker' in w)
   let storageDetail: string | undefined
   if (nav.storage?.estimate) {
@@ -249,7 +231,6 @@ async function detectAll(): Promise<ScanResult> {
   add('Storage', 'IndexedDB', typeof w.indexedDB !== 'undefined')
   add('Storage', 'Cache API', 'caches' in w)
 
-  // System
   let batteryDetail: string | undefined
   const hasBattery = typeof nav.getBattery === 'function'
   if (hasBattery) {
@@ -268,7 +249,6 @@ async function detectAll(): Promise<ScanResult> {
   add('System', 'Web Locks', 'locks' in nav)
   add('System', 'Barcode detection', 'BarcodeDetector' in w)
 
-  // The devices themselves
   const userAgentData = nav.userAgentData
   const platform = prettyPlatform(userAgentData?.platform ?? nav.platform ?? 'Unknown')
   const browser = detectBrowser(userAgentData, nav.userAgent)
@@ -381,216 +361,4 @@ async function detectAll(): Promise<ScanResult> {
   }
 
   return { capabilities, devices }
-}
-
-function SectionHeading({ title, meta }: { title: string; meta?: string }) {
-  return (
-    <div className="mb-3 flex flex-wrap items-center gap-2">
-      <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">{title}</h3>
-      {meta && <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">{meta}</span>}
-    </div>
-  )
-}
-
-function StatTile({ label, value, icon: Icon }: { label: string; value: string; icon: LucideIcon }) {
-  return (
-    <div className="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
-      <div className="grid size-10 shrink-0 place-items-center rounded-xl bg-muted">
-        <Icon className="size-4.5 text-muted-foreground" />
-      </div>
-      <div className="min-w-0">
-        <p className="text-lg font-semibold leading-tight">{value}</p>
-        <p className="text-xs text-muted-foreground">{label}</p>
-      </div>
-    </div>
-  )
-}
-
-function DeviceCardView({ device, wide = false }: { device: DeviceCard; wide?: boolean }) {
-  const Icon = device.icon
-  return (
-    <article className={`rounded-2xl border border-border bg-card p-4 ${wide ? 'sm:col-span-2' : ''}`}>
-      <div className="flex items-start gap-3">
-        <div className="grid size-9 shrink-0 place-items-center rounded-xl bg-muted">
-          <Icon className="size-4 text-muted-foreground" />
-        </div>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <h4 className="truncate text-sm font-semibold">{device.title}</h4>
-            {device.badge && (
-              <span className={`rounded-full px-2 py-1 text-[10px] ${device.badge.tone === 'ok' ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}`}>
-                {device.badge.text}
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 truncate text-xs text-muted-foreground">{device.subtitle}</p>
-          <dl className="mt-3 grid grid-cols-2 gap-x-4 gap-y-1.5 text-[11px] sm:grid-cols-3">
-            {device.meta.map((entry) => (
-              <div key={entry.label} className="min-w-0">
-                <dt className="text-muted-foreground">{entry.label}</dt>
-                <dd className="truncate font-medium">{entry.value}</dd>
-              </div>
-            ))}
-          </dl>
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function CapabilityCard({ capability }: { capability: Capability }) {
-  return (
-    <div className="flex items-start gap-2.5 rounded-2xl border border-border bg-card p-3">
-      <span className={`mt-1.5 size-2 shrink-0 rounded-full ${capability.supported ? 'bg-emerald-500' : 'bg-rose-400/60'}`} />
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium">{capability.name}</p>
-        <p className={`mt-0.5 text-[11px] ${capability.supported ? 'text-muted-foreground' : 'text-rose-500/80'}`}>
-          {capability.detail ?? (capability.supported ? 'Supported' : 'Not supported in this browser')}
-        </p>
-      </div>
-    </div>
-  )
-}
-
-export function DevicesPanel() {
-  const [result, setResult] = useState<ScanResult | null>(null)
-  const [scanning, setScanning] = useState(true)
-  const [scannedAt, setScannedAt] = useState<Date | null>(null)
-
-  const scan = useCallback(async () => {
-    setScanning(true)
-    try {
-      const data = await detectAll()
-      setResult(data)
-      setScannedAt(new Date())
-    } catch {
-      setResult({ capabilities: [], devices: [] })
-    } finally {
-      setScanning(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    scan()
-  }, [scan])
-
-  useEffect(() => {
-    const refresh = () => scan()
-    const media = navigator.mediaDevices
-    window.addEventListener('gamepadconnected', refresh)
-    window.addEventListener('gamepaddisconnected', refresh)
-    media?.addEventListener?.('devicechange', refresh)
-    return () => {
-      window.removeEventListener('gamepadconnected', refresh)
-      window.removeEventListener('gamepaddisconnected', refresh)
-      media?.removeEventListener?.('devicechange', refresh)
-    }
-  }, [scan])
-
-  const current = result?.devices.find((device) => device.id === 'current')
-  const peripherals = result?.devices.filter((device) => device.id !== 'current') ?? []
-  const capabilities = result?.capabilities ?? []
-  const supportedCount = capabilities.filter((capability) => capability.supported).length
-  const groups = capabilities.reduce<Record<string, Capability[]>>((acc, capability) => {
-    ;(acc[capability.category] ??= []).push(capability)
-    return acc
-  }, {})
-  const orderedCategories = CATEGORY_ORDER.filter((category) => groups[category]?.length)
-
-  return (
-    <div className="flex-1 overflow-auto p-5 sm:p-8">
-      <div className="mb-7 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Detected in this browser</p>
-          <h2 className="mt-1 text-2xl font-semibold tracking-tight">Devices</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Every device and web capability this browser can see right now.</p>
-          {scannedAt && (
-            <p className="mt-1 text-[11px] text-muted-foreground">
-              Last scan {scannedAt.toLocaleTimeString()} · re-scans when hardware is plugged in or paired
-            </p>
-          )}
-        </div>
-        <button
-          onClick={scan}
-          disabled={scanning}
-          className="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent disabled:opacity-60"
-        >
-          <RefreshCw className={`size-3.5 ${scanning ? 'animate-spin' : ''}`} />
-          {scanning ? 'Scanning…' : 'Rescan'}
-        </button>
-      </div>
-
-      {!result && (
-        <div className="flex items-center gap-2 rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
-          <RefreshCw className="size-4 animate-spin" />
-          Probing this browser for hardware and web capabilities…
-        </div>
-      )}
-
-      {result && (
-        <div className="flex flex-col gap-7">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <StatTile label="Devices detected" value={String(result.devices.length)} icon={MonitorSmartphone} />
-            <StatTile
-              label="Capabilities supported"
-              value={`${supportedCount}/${capabilities.length}`}
-              icon={CheckCircle2}
-            />
-            <StatTile label="Peripherals" value={String(peripherals.length)} icon={Usb} />
-          </div>
-
-          <section>
-            <SectionHeading title="This device" meta={current?.subtitle} />
-            <div className="grid gap-3">
-              {current && <DeviceCardView device={current} wide />}
-              {!current && <div className="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">Device details unavailable.</div>}
-            </div>
-          </section>
-
-          <section>
-            <SectionHeading title="Connected peripherals" meta={`${peripherals.length} detected`} />
-            {peripherals.length ? (
-              <div className="grid gap-3 sm:grid-cols-2">
-                {peripherals.map((device) => (
-                  <DeviceCardView key={device.id} device={device} />
-                ))}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center">
-                <MonitorSmartphone className="mx-auto size-5 text-muted-foreground" />
-                <p className="mt-2 text-sm font-medium">No peripherals detected yet</p>
-                <p className="mx-auto mt-1 max-w-md text-xs leading-relaxed text-muted-foreground">
-                  Plug in a camera, headset, or gamepad and hit Rescan. Browsers only reveal hardware you grant
-                  permission for — USB, serial, HID, and Bluetooth devices appear here after you pair them once.
-                </p>
-              </div>
-            )}
-          </section>
-
-          <section>
-            <SectionHeading
-              title="Web capabilities"
-              meta={capabilities.length ? `${supportedCount} of ${capabilities.length} supported` : undefined}
-            />
-            <div className="flex flex-col gap-5">
-              {orderedCategories.map((category) => {
-                const items = groups[category]
-                const categorySupported = items.filter((capability) => capability.supported).length
-                return (
-                  <div key={category}>
-                    <SectionHeading title={category} meta={`${categorySupported}/${items.length}`} />
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {items.map((capability) => (
-                        <CapabilityCard key={capability.name} capability={capability} />
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          </section>
-        </div>
-      )}
-    </div>
-  )
 }
