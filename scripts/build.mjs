@@ -10,6 +10,7 @@ rmSync(out, { recursive: true, force: true })
 mkdirSync(join(out, 'src'), { recursive: true })
 
 cpSync(join(root, 'index.html'), join(out, 'index.html'))
+cpSync(join(root, 'bluetooth.html'), join(out, 'bluetooth.html'))
 cpSync(join(root, 'public'), out, { recursive: true })
 cpSync(join(root, 'src'), join(out, 'src'), {
   recursive: true,

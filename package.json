@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/build.mjs",
-    "start": "python3 -m http.server 5173 --directory out",
+    "start": "python3 -m http.server 3000 --directory out",
     "test": "node scripts/smoke.mjs",
     "verify:libs": "node scripts/verify-all.mjs",
     "verify": "npm run verify:libs && npm test"

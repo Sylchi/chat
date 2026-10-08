@@ -1,6 +1,49 @@
-import { CheckCircle2, MonitorSmartphone, RefreshCw, Usb } from '../vendor/icons.js'
+import { CheckCircle2, MonitorSmartphone, RefreshCw, Smartphone, Usb } from '../vendor/icons.js'
 import { esc, icon } from '../dom.js'
 import { CATEGORY_ORDER, detectAll } from '../lib/detect.js'
+import { linked, localDevice, pairSummary } from '../device-store.js'
+
+function trustedSection() {
+  return `<section class="mb-7">
+    <div class="mb-3 flex flex-wrap items-center gap-2"><h3 class="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Trusted devices</h3><span id="dev-trusted-meta" class="rounded-full bg-muted px-2 py-0.5 text-[10px] text-muted-foreground">device layer</span></div>
+    <div class="grid gap-3" id="dev-trusted">
+      <div class="rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">Initializing device principal…</div>
+    </div>
+  </section>`
+}
+
+const b64short = (id) => (id?.length > 12 ? `${id.slice(0, 6)}…${id.slice(-4)}` : id ?? '…')
+
+function trustedRow(local, device) {
+  const isLocal = device.id === local?.id
+  return `<article class="flex items-center gap-3 rounded-2xl border border-border bg-card p-3.5">
+    <div class="grid size-9 shrink-0 place-items-center rounded-xl bg-muted">${icon(isLocal ? MonitorSmartphone : Smartphone, 'size-4 text-muted-foreground')}</div>
+    <div class="min-w-0 flex-1">
+      <div class="flex items-center gap-2"><p class="truncate text-sm font-semibold">${esc(device.name)}</p><span class="rounded-full px-2 py-0.5 text-[10px] ${isLocal ? 'bg-emerald-500/10 text-emerald-600' : 'bg-muted text-muted-foreground'}">${isLocal ? 'this device' : 'linked'}</span></div>
+      <p class="truncate font-mono text-[10px] text-muted-foreground" data-device-link-id="${esc(device.id)}">${esc(b64short(device.id))}</p>
+    </div>
+    <p class="shrink-0 font-mono text-xs tracking-wide text-muted-foreground" data-device-link-code>…</p>
+  </article>`
+}
+
+function renderTrusted(into) {
+  const local = localDevice.get()
+  const peers = linked.get()
+  into.innerHTML = [local ? trustedRow(local, { ...local }) : '', ...peers.map((peer) => trustedRow(local, peer))].join('') ||
+    '<div class="rounded-2xl border border-dashed border-border bg-muted/30 p-4 text-center text-xs text-muted-foreground">Nothing linked yet — open <b>Link a device</b>.</div>'
+  const meta = document.getElementById('dev-trusted-meta')
+  if (meta) meta.textContent = `${1 + peers.length} device${1 + peers.length === 1 ? '' : 's'}`
+  for (const node of into.querySelectorAll('[data-device-link-id]')) {
+    const id = node.dataset.deviceLinkId
+    if (id && id !== local?.id) {
+      void pairSummary(id)
+        .then(({ code }) => {
+          node.closest('article')?.querySelector('[data-device-link-code]')?.replaceChildren(document.createTextNode(code))
+        })
+        .catch(() => {})
+    }
+  }
+}
 
 function sectionHeading(title, meta) {
   return `<div class="mb-3 flex flex-wrap items-center gap-2"><h3 class="text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">${esc(title)}</h3>${
@@ -114,6 +157,7 @@ export const devicesView = {
           <span id="dev-scan-label">Scanning…</span>
         </button>
       </div>
+      <div id="dev-trusted-wrap"></div>
       <div id="dev-loading" class="flex items-center gap-2 rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
         ${icon(RefreshCw, 'size-4 animate-spin')} Probing this browser for hardware and web capabilities…
       </div>
@@ -126,6 +170,15 @@ export const devicesView = {
     const loading = root.querySelector('#dev-loading')
     const content = root.querySelector('#dev-content')
     const scannedAt = root.querySelector('#dev-scanned-at')
+    const trustedWrap = root.querySelector('#dev-trusted-wrap')
+
+    const renderTrustedDevices = () => {
+      trustedWrap.innerHTML = trustedSection()
+      renderTrusted(trustedWrap.querySelector('#dev-trusted'))
+    }
+    renderTrustedDevices()
+    const offLocal = localDevice.subscribe(renderTrustedDevices)
+    const offLinked = linked.subscribe(renderTrustedDevices)
 
     const render = () => {
       scanBtn.disabled = state.scanning
@@ -166,6 +219,8 @@ export const devicesView = {
       window.removeEventListener('gamepadconnected', refresh)
       window.removeEventListener('gamepaddisconnected', refresh)
       navigator.mediaDevices?.removeEventListener?.('devicechange', refresh)
+      offLocal()
+      offLinked()
     })
 
     void runScan()

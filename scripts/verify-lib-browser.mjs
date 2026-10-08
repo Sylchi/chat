@@ -24,6 +24,8 @@ function walk(dir, out = []) {
 }
 
 const files = walk(libRoot)
+// src-side lib lives here too and must stay browser-safe
+files.push(join(libRoot, '..', 'src', 'lib', 'bluetooth.js'))
 check(`lib has JS modules (${files.length})`, files.length > 0)
 
 for (const file of files) {
@@ -54,6 +56,8 @@ const torCellMod = await import('../lib/transports/tor-cell.js')
 const cellBridgeMod = await import('../lib/tor/cell-bridge.js')
 const torFactoryMod = await import('../lib/tor/factory.js')
 const torInstanceMod = await import('../lib/tor/instance.js')
+const deviceMod = await import('../lib/device.js')
+const bluetoothMod = await import('../src/lib/bluetooth.js')
 
 const bytesOf = (s) => cryptoMod.bytesOf(s)
 
@@ -117,6 +121,17 @@ const t3 = torWasmm.torWasmTransport()
 const fakeInst = { connect: async () => { throw new Error('no') } }
 const t4 = cellBridgeMod.createTorCellTransport(fakeInst, 'x')
 check('socks5/ws/tor-wasm transports construct', t1.name.startsWith('socks5') && t2.name === 'ws-bridge' && t3.name === 'tor-wasm' && t4.name === 'x')
+
+// device layer round-trips with Buffer disabled
+const devA = await deviceMod.createDevicePrincipal('a')
+const devB = await deviceMod.createDevicePrincipal('b')
+const sA = await deviceMod.deviceLinkSecret(devA.priv, devA.pub, devB.pub)
+const sB = await deviceMod.deviceLinkSecret(devB.priv, devB.pub, devA.pub)
+check('device link secret symmetric (browser-safe)', sA.length === 32 && sA.every((v, i) => v === sB[i]))
+check('pairing code 6 digits', /^\d{6}$/.test(deviceMod.pairingCode(sA)))
+const peer = await deviceMod.parsePeerPayload(JSON.stringify(deviceMod.peerPayload(devA)))
+check('peer payload parses (browser-safe)', peer.id === devA.id)
+check('bluetooth module loads (browser-safe)', typeof bluetoothMod.bluetoothAvailable === 'function' && bluetoothMod.PAIR_SERVICE.length === 36)
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall lib modules browser-ready')
 process.exit(failures ? 1 : 0)

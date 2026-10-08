@@ -104,7 +104,7 @@
   --chart-3: oklch(0.439 0 0);
   --chart-4: oklch(0.371 0 0);
   --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
+  --sidebar: oklch(0.225 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -140,7 +140,7 @@
     --chart-3: oklch(0.439 0 0);
     --chart-4: oklch(0.371 0 0);
     --chart-5: oklch(0.269 0 0);
-    --sidebar: oklch(0.205 0 0);
+    --sidebar: oklch(0.225 0 0);
     --sidebar-foreground: oklch(0.985 0 0);
     --sidebar-primary: oklch(0.488 0.243 264.376);
     --sidebar-primary-foreground: oklch(0.985 0 0);
@@ -151,9 +151,64 @@
   }
 }
 
+/* Sidebar geometry is driven by a single state attribute ([data-collapsed])
+   instead of JS toggling utility strings. These rules live outside @layer
+   so they win over Tailwind's utilities layer. */
+[data-desktop-sidebar] {
+  width: 236px;
+}
+[data-desktop-sidebar][data-collapsed] {
+  width: 72px;
+}
+[data-desktop-sidebar][data-collapsed] [data-side-hide] {
+  display: none;
+}
+[data-desktop-sidebar][data-collapsed] [data-side-row] {
+  justify-content: center;
+}
+[data-desktop-sidebar][data-collapsed] [data-nav] {
+  position: relative;
+}
+/* Unread counts become dots on the collapsed rail. */
+[data-desktop-sidebar][data-collapsed] [data-nav-count] {
+  position: absolute;
+  top: 4px;
+  right: 6px;
+  display: grid;
+  place-items: center;
+  width: 7px;
+  height: 7px;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
+  font-size: 0;
+  line-height: 0;
+  color: transparent;
+  background: var(--primary);
+}
+[data-desktop-sidebar][data-collapsed] [data-nav][aria-current="page"] [data-nav-count] {
+  background: var(--primary-foreground);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: color-mix(in oklch, var(--muted-foreground) 65%, transparent);
   }
   body {
     @apply bg-background text-foreground;

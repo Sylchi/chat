@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <title>Web Bluetooth API probe</title>
+    <style>
+      :root { color-scheme: light dark; --bg:#0b0d10; --panel:#14171c; --line:#242a32; --fg:#e6e9ee; --muted:#8b95a3; --ok:#3fb950; --bad:#f85149; --warn:#d29922; --accent:#4493f8; }
+      @media (prefers-color-scheme: light) { :root { --bg:#f6f7f9; --panel:#fff; --line:#dfe3e8; --fg:#1b1f24; --muted:#5b6572; } }
+      * { box-sizing: border-box; }
+      body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.5 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+      main { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+      h1 { font-size: 22px; margin: 0 0 4px; }
+      p.sub { color: var(--muted); margin: 0 0 24px; }
+      section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; margin-bottom: 16px; }
+      h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); margin: 0 0 12px; font-weight: 600; }
+      table { width: 100%; border-collapse: collapse; font-size: 13px; }
+      td, th { text-align: left; padding: 6px 8px; border-top: 1px solid var(--line); vertical-align: top; }
+      tr:first-child td, tr:first-child th { border-top: 0; }
+      td.name { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+      .ok { color: var(--ok); } .bad { color: var(--bad); } .warn { color: var(--warn); }
+      .badge { display:inline-block; font-size:11px; font-weight:600; padding:1px 7px; border-radius:999px; border:1px solid currentColor; }
+      code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+      .members { color: var(--muted); }
+      .members b { color: var(--fg); font-weight: 500; }
+      button { font: inherit; font-size: 13px; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--fg); cursor: pointer; }
+      button:hover { border-color: var(--accent); }
+      button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+      .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+      #log { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; white-space: pre-wrap; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; min-height: 44px; color: var(--muted); margin-top: 12px; }
+      .summary { font-size: 15px; margin-bottom: 4px; }
+      .kv { display: grid; grid-template-columns: 180px 1fr; gap: 4px 12px; font-size: 13px; }
+      .kv dt { color: var(--muted); } .kv dd { margin: 0; word-break: break-word; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Web Bluetooth API probe</h1>
+      <p class="sub">Which Web Bluetooth APIs this browser exposes, and whether the ones <code>src/lib/bluetooth.js</code> needs are all present.</p>
+
+      <section>
+        <h2>Summary</h2>
+        <div class="summary" id="summary">Probing…</div>
+        <dl class="kv" id="env"></dl>
+      </section>
+
+      <section>
+        <h2>Runtime checks</h2>
+        <table id="live"></table>
+        <div class="row" style="margin-top:14px">
+          <button class="primary" id="btn-chooser">Run requestDevice() chooser</button>
+          <button id="btn-usb">Request WebUSB device</button>
+          <button id="btn-usb-hci-reset">WebUSB HCI Reset</button>
+          <button id="btn-usb-close">Close WebUSB device</button>
+          <button id="btn-copy">Copy JSON report</button>
+          <button id="btn-rerun">Re-run runtime checks</button>
+        </div>
+        <div id="log">idle</div>
+      </section>
+
+      <section>
+        <h2>Required by src/lib/bluetooth.js</h2>
+        <table id="chain"></table>
+      </section>
+
+      <section>
+        <h2>navigator.bluetooth surface</h2>
+        <table id="nbc"></table>
+      </section>
+
+      <section>
+        <h2>Bluetooth interfaces</h2>
+        <table id="ifaces"></table>
+      </section>
+    </main>
+
+    <script type="module">
+      import { bluetoothAvailable, PAIR_SERVICE, PAYLOAD_CHAR } from './src/lib/bluetooth.js'
+
+      const $ = (id) => document.getElementById(id)
+      const report = { generatedAt: new Date().toISOString(), environment: {}, live: {}, chain: {}, navigatorBluetooth: {}, interfaces: {} }
+
+      function protoMembers(obj) {
+        const names = new Set()
+        let p = obj ? Object.getPrototypeOf(obj) : null
+        while (p && p !== Object.prototype) {
+          for (const k of Object.getOwnPropertyNames(p)) if (k !== 'constructor') names.add(k)
+          p = Object.getPrototypeOf(p)
+        }
+        return [...names].sort()
+      }
+
+      function row(table, ...cells) {
+        // accept row(t, [tag, html], [tag, html]) and row(t, [[tag, html], ...])
+        if (cells.length === 1 && Array.isArray(cells[0]) && cells[0].every(Array.isArray)) cells = cells[0]
+        const tr = document.createElement('tr')
+        for (const [spec, html, cls] of cells) {
+          const [tag, ...classes] = String(spec).trim().split(/\s+/)
+          if (!/^[a-zA-Z][\w-]*$/.test(tag)) throw new Error(`bad cell tag: ${JSON.stringify(tag)}`)
+          const td = document.createElement(tag)
+          td.className = [...classes, cls].filter(Boolean).join(' ')
+          td.innerHTML = html
+          tr.append(td)
+        }
+        table.append(tr)
+      }
+
+      const flag = (on) => `<span class="badge ${on ? 'ok' : 'bad'}">${on ? 'present' : 'missing'}</span>`
+      const esc = (s) => String(s).replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]))
+      const log = (msg) => { $('log').textContent = msg }
+      const withTimeout = (promise, ms, label) =>
+        Promise.race([promise, new Promise((_, rej) => setTimeout(() => rej(new Error(label + ' timed out after ' + ms + 'ms')), ms))])
+
+      // ---- environment ----
+      const nav = navigator
+      const bt = 'bluetooth' in nav ? nav.bluetooth : null
+      const env = {
+        userAgent: nav.userAgent,
+        secureContext: window.isSecureContext,
+        protocol: location.protocol,
+        origin: location.origin,
+        hardwareConcurrency: nav.hardwareConcurrency,
+        bluetoothInNavigator: Boolean(bt),
+        navigatorBluetoothType: bt ? typeof bt : 'undefined',
+        appBluetoothAvailable: bluetoothAvailable(),
+        pairService: PAIR_SERVICE,
+        payloadCharacteristic: PAYLOAD_CHAR,
+      }
+      report.environment = env
+      $('env').innerHTML = Object.entries(env)
+        .map(([k, v]) => `<dt>${esc(k)}</dt><dd class="mono">${esc(typeof v === 'object' ? JSON.stringify(v) : String(v))}</dd>`)
+        .join('')
+
+      // ---- navigator.bluetooth surface ----
+      const nbcTable = $('nbc')
+      if (!bt) {
+        row(nbcTable, ['td', '<span class="bad">navigator.bluetooth is not exposed</span> — Chrome/Edge only, and never over http:// or file://. Secure context (https:// or localhost) required.'])
+      } else {
+        row(nbcTable, ['th', 'Member'], ['th', 'Type'])
+        const members = protoMembers(bt)
+        for (const k of members) row(nbcTable, ['td name', esc(k)], ['td', `<span class="mono ${typeof bt[k] === 'function' ? 'ok' : ''}">${typeof bt[k]}</span>`])
+        for (const k of Object.getOwnPropertyNames(bt)) {
+          if (members.includes(k)) continue
+          row(nbcTable, ['td name', esc(k) + ' <span class="members">(own)</span>'], ['td', `<span class="mono">${typeof bt[k]}</span>`])
+        }
+        report.navigatorBluetooth = Object.fromEntries(members.map((k) => [k, typeof bt[k]]))
+      }
+
+      // ---- interfaces ----
+      const ifaceNames = [
+        'BluetoothDevice',
+        'BluetoothRemoteGATTServer',
+        'BluetoothRemoteGATTService',
+        'BluetoothRemoteGATTCharacteristic',
+        'BluetoothRemoteGATTDescriptor',
+        'BluetoothAdvertisingEvent',
+        'BluetoothManufacturerDataMap',
+        'BluetoothServiceDataMap',
+      ]
+      const ifaceTable = $('ifaces')
+      row(ifaceTable, ['th', 'Interface'], ['th', 'Exposed'], ['th', 'Prototype members'])
+      for (const name of ifaceNames) {
+        const ctor = window[name]
+        const present = typeof ctor === 'function'
+        const members = present ? protoMembers(ctor.prototype) : []
+        report.interfaces[name] = { present, members }
+        row(ifaceTable, [
+          ['td name', esc(name)],
+          ['td', flag(present)],
+          ['td members', present ? members.map((m) => `<b>${esc(m)}</b>`).join(', ') || '<span class="members">none</span>' : '—'],
+        ])
+      }
+
+      // ---- the exact chain src/lib/bluetooth.js drives ----
+      const charProto = window.BluetoothRemoteGATTCharacteristic?.prototype
+      const serverProto = window.BluetoothRemoteGATTServer?.prototype
+      const serviceProto = window.BluetoothRemoteGATTService?.prototype
+      const deviceProto = window.BluetoothDevice?.prototype
+      const chain = [
+        ['navigator.bluetooth.requestDevice()', bt && typeof bt.requestDevice === 'function', 'navigator.bluetooth'],
+        ['device.gatt (getter)', deviceProto && 'gatt' in deviceProto, 'BluetoothDevice.prototype'],
+        ['server.connect()', serverProto && typeof serverProto.connect === 'function', 'BluetoothRemoteGATTServer.prototype'],
+        ['server.disconnect()', serverProto && typeof serverProto.disconnect === 'function', 'BluetoothRemoteGATTServer.prototype'],
+        ['server.getPrimaryService()', serverProto && typeof serverProto.getPrimaryService === 'function', 'BluetoothRemoteGATTServer.prototype'],
+        ['service.getCharacteristic()', serviceProto && typeof serviceProto.getCharacteristic === 'function', 'BluetoothRemoteGATTService.prototype'],
+        ['char.writeValueWithoutResponse()', charProto && typeof charProto.writeValueWithoutResponse === 'function', 'BluetoothRemoteGATTCharacteristic.prototype'],
+        ['char.writeValueWithResponse()', charProto && typeof charProto.writeValueWithResponse === 'function', 'BluetoothRemoteGATTCharacteristic.prototype'],
+        ['char.readValue()', charProto && typeof charProto.readValue === 'function', 'BluetoothRemoteGATTCharacteristic.prototype'],
+        ['char.startNotifications()', charProto && typeof charProto.startNotifications === 'function', 'BluetoothRemoteGATTCharacteristic.prototype'],
+        ['device.onadvertisementreceived', deviceProto && 'onadvertisementreceived' in deviceProto, 'BluetoothDevice.prototype'],
+        ['device.ongattserverdisconnected', deviceProto && 'ongattserverdisconnected' in deviceProto, 'BluetoothDevice.prototype'],
+        ['navigator.bluetooth.getAvailability()', bt && typeof bt.getAvailability === 'function', 'navigator.bluetooth'],
+        ['navigator.bluetooth.getDevices()', bt && typeof bt.getDevices === 'function', 'navigator.bluetooth'],
+        ['navigator.bluetooth.requestLESession()', bt && typeof bt.requestLESession === 'function', 'navigator.bluetooth (experimental)'],
+      ]
+      const chainTable = $('chain')
+      row(chainTable, ['th', 'Requirement'], ['th', 'Status'], ['th', 'Defined on'])
+      let chainOk = 0
+      for (const [label, ok, where] of chain) {
+        if (ok) chainOk++
+        report.chain[label] = Boolean(ok)
+        row(chainTable, ['td name', esc(label)], ['td', flag(ok)], ['td members', esc(where)])
+      }
+      const appCore = chain.slice(0, 10).every(([, ok]) => ok)
+      report.chainCompleteForPairing = appCore
+
+      const summary = []
+      summary.push(
+        bt
+          ? `<span class="ok">navigator.bluetooth present</span> (${Object.keys(report.navigatorBluetooth).length} members)`
+          : `<span class="bad">navigator.bluetooth absent</span>`,
+      )
+      summary.push(
+        appCore
+          ? `<span class="ok">all APIs required by src/lib/bluetooth.js are present</span>`
+          : `<span class="bad">missing APIs required by src/lib/bluetooth.js</span>`,
+      )
+      summary.push(`${chainOk}/${chain.length} probed requirements present`)
+      $('summary').innerHTML = summary.join(' &middot; ')
+
+      // ---- async runtime checks ----
+      async function runLive() {
+        const table = $('live')
+        table.innerHTML = ''
+        const put = (label, status, detail) => {
+          row(table, ['td name', esc(label)], ['td', status], ['td members', esc(detail ?? '')])
+          report.live[label] = { status: status.replace(/<[^>]+>/g, ''), detail: detail ?? '' }
+        }
+        put('secure context', window.isSecureContext ? '<span class="ok">yes</span>' : '<span class="bad">no</span>', location.origin)
+        put('WebUSB', 'usb' in navigator ? '<span class="ok">present</span>' : '<span class="bad">missing</span>', 'usb' in navigator ? 'navigator.usb available' : 'navigator.usb not available')
+        put('WebSerial', 'serial' in navigator ? '<span class="ok">present</span>' : '<span class="bad">missing</span>', 'serial' in navigator ? 'navigator.serial available' : 'navigator.serial not available')
+
+        if (!bt) {
+          put('navigator.bluetooth', '<span class="bad">missing</span>', 'Web Bluetooth not exposed to this page')
+        } else {
+          put('navigator.bluetooth', '<span class="ok">present</span>', `type ${typeof bt}`)
+        }
+
+        try {
+          const available = await withTimeout(bt.getAvailability(), 5000, 'getAvailability()')
+          put('getAvailability()', available ? '<span class="ok">true</span>' : '<span class="warn">false</span>',
+            available ? 'adapter reachable — requestDevice() should work' : 'API present but no Bluetooth adapter available to this origin')
+        } catch (err) {
+          put('getAvailability()', '<span class="bad">error</span>', `${err.name}: ${err.message}`)
+        }
+
+        try {
+          const devices = await withTimeout(bt.getDevices(), 5000, 'getDevices()')
+          put('getDevices()', `<span class="ok">${devices.length}</span>`,
+            devices.length ? devices.map((d) => `${d.name || '(unnamed)'} [${d.id}]`).join(', ') : 'no devices previously granted to this origin')
+        } catch (err) {
+          put('getDevices()', '<span class="bad">error</span>', `${err.name}: ${err.message}`)
+        }
+
+        try {
+          const status = await withTimeout(navigator.permissions.query({ name: 'bluetooth' }), 5000, 'permissions.query')
+          put('permissions.query(bluetooth)', `<span class="ok">${status.state}</span>`, 'permission state recorded')
+        } catch (err) {
+          put('permissions.query(bluetooth)', '<span class="warn">unsupported</span>', `${err.name}: ${err.message} — Web Bluetooth uses the chooser, not the Permissions API`)
+        }
+
+        try {
+          const gattSupported = 'BluetoothRemoteGATTServer' in window && typeof window.BluetoothRemoteGATTServer?.prototype?.connect === 'function'
+          put('GATT client interface', gattSupported ? '<span class="ok">present</span>' : '<span class="bad">missing</span>',
+            gattSupported ? 'connect/disconnect/getPrimaryService available' : 'cannot open a GATT session')
+        } catch (err) {
+          put('GATT client interface', '<span class="bad">error</span>', err.message)
+        }
+      }
+
+      async function runChooser() {
+        if (!bt) { log('navigator.bluetooth is absent — no chooser to open'); return }
+        if (!window.isSecureContext) { log('insecure context: requestDevice() is disabled'); return }
+        log('opening the device chooser… (pick a device advertising the pairing service, or cancel)')
+        try {
+          const device = await bt.requestDevice({
+            filters: [{ services: [PAIR_SERVICE] }],
+            optionalServices: [PAIR_SERVICE],
+          })
+          const detail = `id=${device.id} name=${JSON.stringify(device.name)} uuids=${JSON.stringify(device.uuids ?? [])} gatt=${Boolean(device.gatt)}`
+          log('requestDevice() resolved: ' + detail)
+          report.chooser = { result: 'resolved', detail }
+          try {
+            const server = await device.gatt.connect()
+            log(log() + `\ngatt.connect() OK — connected=${server.connected}`)
+            report.chooser.gatt = 'connected'
+            try { server.disconnect() } catch {}
+          } catch (err) {
+            log(log() + `\ngatt.connect() failed: ${err.name}: ${err.message}`)
+            report.chooser.gatt = `${err.name}: ${err.message}`
+          }
+        } catch (err) {
+          log(`requestDevice() rejected: ${err.name}: ${err.message}`)
+          report.chooser = { result: 'rejected', error: `${err.name}: ${err.message}` }
+        }
+      }
+
+      // WebUSB state
+      let usbDevice = null
+
+      async function requestUsbDevice() {
+        if (!('usb' in navigator)) {
+          log('WebUSB not available in this browser')
+          return
+        }
+        try {
+          log('Opening WebUSB device chooser...')
+          const device = await navigator.usb.requestDevice({ filters: [] })
+          usbDevice = device
+          log(`Connected: ${device.productName || device.serialNumber || 'unknown'} (VID:${device.vendorId.toString(16)} PID:${device.productId.toString(16)})`)
+          report.webusb = {
+            connected: true,
+            vendorId: device.vendorId,
+            productId: device.productId,
+            productName: device.productName,
+            manufacturerName: device.manufacturerName,
+            serialNumber: device.serialNumber,
+            deviceClass: device.deviceClass,
+            deviceSubclass: device.deviceSubclass,
+            deviceProtocol: device.deviceProtocol,
+            configCount: device.configurations?.length
+          }
+          try {
+            await device.open()
+            log('Device opened successfully')
+          } catch (err) {
+            log(`Failed to open device: ${err.name}: ${err.message}`)
+          }
+        } catch (err) {
+          log(`WebUSB requestDevice failed: ${err.name}: ${err.message}`)
+          report.webusb = { connected: false, error: `${err.name}: ${err.message}` }
+        }
+      }
+
+      async function closeUsbDevice() {
+        if (usbDevice && usbDevice.opened) {
+          try {
+            await usbDevice.close()
+            log('WebUSB device closed')
+          } catch (err) {
+            log(`Failed to close: ${err.name}: ${err.message}`)
+          }
+        } else if (usbDevice) {
+          log('Device not opened')
+        } else {
+          log('No WebUSB device connected')
+        }
+      }
+
+      // HCI Reset command: HCI Command packet - OGF=0x03 (Host Controller & Baseband), OCF=0x0003 (Reset)
+      // Command packet format: 0x01 (command) + OCF+OGF (little endian for OCF in some implementations, but generally 0x03 0x0C for Reset)
+      // Standard: HCI_Reset is OGF=3, OCF=3 -> command opcode = (OCF << 10) | OGF? Or (OGF<<10)|OCF? Typically opcode = OCF | (OGF<<10), little endian in packet: LSB first
+      // Reset opcode: 0x0003 -> little endian: 0x03 0x0C? Wait: OGF=0x03 (3), OCF=0x0003 (3) -> opcode = 0x0003 | (0x03 << 10) = 0x0003 | 0x0C00 = 0x0C03. Little endian byte order: 0x03 0x0C
+      async function hciReset() {
+        if (!usbDevice || !usbDevice.opened) {
+          log('No open WebUSB device - connect first')
+          return
+        }
+        try {
+          // Try to claim the first HCI interface (common for USB dongles)
+          // Bluetooth HCI USB class: Class 0xE0, Subclass 0x01, Protocol 0x01
+          const config = usbDevice.configuration || usbDevice.configurations[0]
+          if (!config) {
+            await usbDevice.selectConfiguration(1)
+          }
+          const iface = usbDevice.configuration?.interfaces[0] || usbDevice.configurations[0]?.interfaces[0]
+          if (iface) {
+            await usbDevice.claimInterface(iface.interfaceNumber)
+          }
+          // HCI Reset command: command packet type 0x01, opcode 0x0C03 LE, length 0x00
+          const resetCmd = new Uint8Array([0x01, 0x03, 0x0C, 0x00])
+          // For USB HCI, data goes to endpoint - usually control or bulk; often endpoint 0 for commands
+          await usbDevice.controlTransferOut({
+            requestType: 'class',
+            recipient: 'interface',
+            request: 0x0,
+            value: 0x0,
+            index: iface?.interfaceNumber || 0
+          }, resetCmd)
+          log('HCI Reset command sent (0x01 0x03 0x0C 0x00)')
+        } catch (err) {
+          log(`HCI Reset failed: ${err.name}: ${err.message}`)
+        }
+      }
+
+      $('btn-chooser').addEventListener('click', () => void runChooser())
+      $('btn-usb').addEventListener('click', () => void requestUsbDevice())
+      $('btn-usb-hci-reset').addEventListener('click', () => void hciReset())
+      $('btn-usb-close').addEventListener('click', () => void closeUsbDevice())
+      $('btn-rerun').addEventListener('click', () => void runLive())
+      $('btn-copy').addEventListener('click', async () => {
+        const text = JSON.stringify(report, null, 2)
+        try {
+          await navigator.clipboard.writeText(text)
+          log('report copied to clipboard (' + text.length + ' bytes)')
+        } catch {
+          log(text)
+        }
+      })
+
+      await runLive()
+      window.__bluetoothReport = report
+      console.log('[bluetooth probe]', report)
+    </script>
+  </body>
+</html>

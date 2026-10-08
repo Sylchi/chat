@@ -1,6 +1,5 @@
-import { hkdf, bytesOf } from '../lib/crypto.js'
+import { hkdf, bytesOf, randomBytes } from '../lib/crypto.js'
 import { memoryStore, enrollFromPrf, unlockFromPrf, loadUserRecord } from '../lib/keystore.js'
-import { unwrapDevice } from '../lib/identity.js'
 
 async function main() {
   let ok = true
@@ -14,11 +13,12 @@ async function main() {
     '9b74b8d0a6f21c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5'
   const prf = await hkdf(bytesOf('fake-passkey-secret'), salt, bytesOf('prf'), 32)
 
-  // enroll persists only non-secret material: salt, public keys, wrapped device
+  // enroll persists only non-secret material: salt, public keys, device seed
   const store = memoryStore()
   const { session, self } = await enrollFromPrf(store, salt, credId, 'test user', prf)
   check('enroll returns session', session.deviceId.length > 0)
   check('enroll returns self identity', self.id.length > 0)
+  check('enroll uses the devices-first principal', session.deviceId === self.deviceId)
 
   // nothing user-secret may hit the store
   const keys = await store.list('')
@@ -27,6 +27,14 @@ async function main() {
     return Buffer.from(b).includes(Buffer.from(bytesOf('fake-passkey-secret')))
   })
   check('no user-secret material persisted', !leaked)
+
+  // device works before/independent of the user: the seed is stored wrapped
+  // under the device root key (never under a plaintext user secret gear)
+  const rootKey = await store.get('devices/rootkey')
+  const local = await store.get('devices/local')
+  check('device root key + wrapped seed persisted', rootKey?.length === 32 && !!local)
+  const linkedKeys = keys.filter(({ key }) => key.startsWith('devices/'))
+  check('no stale I_U-wrapped device blobs', linkedKeys.length === 2) // rootkey + local
 
   // unlocking with the same PRF restores the same device key
   const session2 = await unlockFromPrf(store, prf)
@@ -40,23 +48,17 @@ async function main() {
   const lock = { dropped: true } // acquisition of Session is in-memory only
   check('lock wipes session keys', lock.dropped) // trivial; contract enforced by memory
 
-  // wrong PRF (different user) cannot unlock the wrapped device key
-  const wrongPrf = await hkdf(bytesOf('some-other-secret'), salt, bytesOf('prf'), 32)
+  // a corrupted device root key cannot unlock the device seed
+  const tampered = memoryStore()
+  await enrollFromPrf(tampered, salt, credId, 'test user', prf)
+  await tampered.set('devices/rootkey', randomBytes(32))
   let unwrapFailed = false
   try {
-    const local = await store.get('devices/local')
-    if (!local) throw new Error('no local blob')
-    // devices/local layout: [idLen:4][id][pub:32][wrappedLen:4][wrapped]
-    const d = new DataView(local.buffer, local.byteOffset, local.byteLength)
-    const idLen = d.getUint32(0, false)
-    const wrappedLenOff = 4 + idLen + 32
-    const wrappedLen = d.getUint32(wrappedLenOff, false)
-    const wrapped = local.slice(wrappedLenOff + 4, wrappedLenOff + 4 + wrappedLen)
-    await unwrapDevice(wrapped, wrongPrf) // wrapped is the AES-GCM ciphertext
+    await unlockFromPrf(tampered, prf)
   } catch {
     unwrapFailed = true
   }
-  check('wrong user cannot unwrap device', unwrapFailed)
+  check('wrong device root key cannot unlock device', unwrapFailed)
 
   // user record truth roundtrips
   const rec = await loadUserRecord(store)

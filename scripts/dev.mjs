@@ -8,7 +8,7 @@ const tailwind = spawn('npx', ['@tailwindcss/cli', '-i', './src/styles.css', '-o
   cwd: root,
   stdio: 'inherit',
 })
-const server = spawn('python3', ['-m', 'http.server', '5173'], { cwd: root, stdio: 'inherit' })
+const server = spawn('python3', ['-m', 'http.server', '3000'], { cwd: root, stdio: 'inherit' })
 
 let exiting = false
 const shutdown = () => {

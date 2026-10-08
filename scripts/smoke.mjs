@@ -25,6 +25,78 @@ globalThis.localStorage = {
   removeItem(key) { delete this.store[key] },
 }
 
+/* minimal IndexedDB so the REAL openIdbStore path is exercised (not a shim) */
+;(() => {
+  const databases = new Map()
+  const enqueue = (fn) => queueMicrotask(fn)
+  const request = () => ({ onsuccess: null, onerror: null, result: null, error: null })
+  const run = (map, fn) => {
+    const r = request()
+    enqueue(() => {
+      r.result = fn(map)
+      if (r.onsuccess) r.onsuccess({ target: r })
+    })
+    return r
+  }
+  class FakeStore {
+    constructor(map) { this.map = map }
+    get(key) { return run(this.map, (m) => (m.has(key) ? m.get(key) : undefined)) }
+    put(value, key) { return run(this.map, (m) => (m.set(key, value), key)) }
+    delete(key) { return run(this.map, (m) => (m.delete(key), undefined)) }
+    openCursor(range) {
+      const r = request()
+      const lower = range?.lower ?? ''
+      const upper = range ? range.upper : '\uffff'
+      const keys = [...this.map.keys()].filter((k) => k >= lower && k <= upper).sort()
+      let i = 0
+      const emit = () => {
+        if (i >= keys.length) {
+          r.result = null
+          if (r.onsuccess) r.onsuccess({ target: r })
+          return
+        }
+        const k = keys[i++]
+        r.result = { key: k, value: this.map.get(k), continue: () => enqueue(emit) }
+        if (r.onsuccess) r.onsuccess({ target: r })
+      }
+      enqueue(emit)
+      return r
+    }
+  }
+  class FakeDB {
+    constructor() {
+      this._stores = new Map()
+      this.objectStoreNames = { contains: (name) => this._stores.has(name) }
+    }
+    createObjectStore(name) {
+      const map = new Map()
+      this._stores.set(name, map)
+      return new FakeStore(map)
+    }
+    transaction() {
+      return { objectStore: (name) => new FakeStore(this._stores.get(name)) }
+    }
+  }
+  globalThis.indexedDB = {
+    open(name, version) {
+      const r = request()
+      enqueue(() => {
+        let db = databases.get(name)
+        const isNew = !db
+        if (isNew) {
+          db = new FakeDB()
+          databases.set(name, db)
+        }
+        r.result = db
+        if (isNew && r.onupgradeneeded) r.onupgradeneeded({ target: r })
+        if (r.onsuccess) r.onsuccess({ target: r })
+      })
+      return r
+    },
+  }
+  globalThis.IDBKeyRange = { bound: (lower, upper) => ({ lower, upper }) }
+})()
+
 /* linkedom gaps that real browsers provide */
 const TA = window.HTMLTextAreaElement
 if (!TA.prototype.setSelectionRange) TA.prototype.setSelectionRange = function (s, e) { this.__sel = [s, e] }
@@ -242,6 +314,135 @@ assert(document.querySelector('[data-agent-hint-text]')?.textContent.includes('N
 
 store.appendMessage(AGENT_CHAT, { from: 'agent', text: 'done', time: 'Now', stats: '42 tokens · 12 tok/s' })
 assert(document.getElementById('thread-messages').textContent.includes('42 tokens · 12 tok/s'), 'generation stats render under message')
+
+/* 16. device layer: IndexedDB principal, link modal, symmetric pairing code */
+const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
+/* crypto.subtle hops the threadpool, so single-tick flushes are racy — poll. */
+const waitFor = async (cond, ticks = 200) => {
+  for (let i = 0; i < ticks && !cond(); i++) await flush()
+  return cond()
+}
+const devStore = await import('../src/device-store.js')
+const device = await import('../lib/device.js')
+const keystore = await import('../lib/keystore.js')
+
+const devDB = await devStore.initDevices()
+assert(!!devStore.localDevice.get(), 'device principal boots (devices-first)')
+assert(!!devStore.localDevice.get().fingerprint, 'local device has fingerprint')
+assert(
+  localStorage.getItem('devices/local') === null && localStorage.getItem('devices/rootkey') === null,
+  'device material lives in IndexedDB, not localStorage',
+)
+
+/* open the Link a device modal; Bluetooth is gated in this headless env */
+click(document.querySelector('[data-nav-custom="link"]'))
+await flush()
+const linkModal = document.querySelector('[data-modal="link"]')
+assert(!linkModal.classList.contains('hidden'), 'Link a device modal opens')
+const linkBt = linkModal.querySelector('[data-link-bt]')
+assert(linkBt && linkBt.disabled && linkBt.textContent.includes('Web Bluetooth unavailable'), 'Bluetooth link gated when unsupported')
+
+/* a second physical device pairing over the paste path */
+const peerB = await device.createDevicePrincipal('laptop')
+const localKp = await keystore.localDeviceKeypair(devDB)
+const localPub = (await keystore.getLocalPrincipal(devDB)).pub
+const myCode = device.pairingCode(await device.deviceLinkSecret(localKp.priv, localKp.pub, peerB.pub))
+const theirCode = device.pairingCode(await device.deviceLinkSecret(peerB.priv, peerB.pub, localPub))
+assert(myCode === theirCode && /^\d{6}$/.test(myCode), 'link secret symmetric on both devices')
+
+type(linkModal.querySelector('[data-link-payload]'), JSON.stringify(device.peerPayload(peerB)))
+click(linkModal.querySelector('[data-link-complete]'))
+assert(await waitFor(() => devStore.pairCode.get() === myCode), 'pair code derived for the new peer')
+
+const linkedList = await devStore.refreshLinked()
+assert(linkedList.length === 1 && linkedList[0].id === peerB.id, 'peer persisted under devices/linked/')
+assert(devStore.pairCode.get() === myCode, 'pair code matches the keystore-derived secret')
+assert(linkModal.querySelector('[data-link-body]').textContent.includes(myCode), 'modal renders the 6-digit verify code')
+assert(linkModal.querySelector('[data-link-body]').textContent.includes('Linked devices (1)'), 'linked list rendered in modal')
+
+/* Trusted devices section derives the per-peer code */
+click(document.querySelector('[data-nav-custom="devices"]'))
+await flush()
+const trustedId = document.querySelector('[data-device-link-id]')
+assert(!!trustedId && trustedId.textContent.length > 0, 'trusted device row rendered')
+assert(
+  await waitFor(() =>
+    [...document.querySelectorAll('[data-device-link-code]')].some((cell) => cell.textContent === myCode),
+  ),
+  'trusted device shows the same symmetric code',
+)
+
+/* error paths: malformed payload + self-link rejected */
+click(document.querySelector('[data-nav-custom="link"]'))
+await flush()
+type(linkModal.querySelector('[data-link-payload]'), 'not json')
+click(linkModal.querySelector('[data-link-complete]'))
+assert(
+  await waitFor(() => linkModal.querySelector('[data-link-body]').textContent.includes('valid JSON')),
+  'malformed payload surfaces an error',
+)
+
+const selfJson = JSON.stringify(device.peerPayload({ id: devStore.localDevice.get().id, name: 'self', pub: devStore.localDevice.get().pub }))
+/* the body re-renders on every error, so re-query the textarea each time */
+type(linkModal.querySelector('[data-link-payload]'), selfJson)
+click(linkModal.querySelector('[data-link-complete]'))
+assert(
+  await waitFor(() => linkModal.querySelector('[data-link-body]').textContent.includes('cannot link')),
+  'self-link rejected',
+)
+
+await devStore.removeLinkedDevice(peerB.id)
+assert((await devStore.refreshLinked()).length === 0, 'unlink removes the peer')
+
+/* 17. passkey layer: enrollment facts drive the modal, errors are surfaced */
+const passkeyStore = await import('../src/passkey-store.js')
+const passkeyKeystore = await import('../lib/keystore.js')
+const passkeyCrypto = await import('../lib/crypto.js')
+
+const pkStore = await devStore.backend()
+await passkeyKeystore.enrollFromPrf(
+  pkStore,
+  passkeyCrypto.randomBytes(32),
+  'fake-cred-id',
+  'Alex Rivera',
+  passkeyCrypto.randomBytes(32),
+)
+await passkeyStore.initPasskey()
+assert(
+  passkeyStore.passkey.get().enrolled && passkeyStore.passkey.get().status === 'locked',
+  'initPasskey reads enrollment facts from the store',
+)
+
+click(document.querySelector('[data-desktop-sidebar] [data-nav-custom="auth"]'))
+await flush()
+const authModal = document.querySelector('[data-modal="auth"]')
+assert(!authModal.classList.contains('hidden'), 'Passkeys modal opens')
+assert(
+  authModal.querySelector('[data-auth-platform]')?.textContent.includes('Unlock with passkey'),
+  'enrolled modal offers unlock',
+)
+
+click(authModal.querySelector('[data-auth-platform]'))
+await flush()
+await flush()
+assert(
+  authModal.querySelector('[data-auth-body]').textContent.includes('WebAuthn unavailable'),
+  'WebAuthn failure surfaced in the modal instead of a silent close',
+)
+assert(!authModal.classList.contains('hidden'), 'modal stays open after a failed unlock')
+assert(passkeyStore.passkey.get().status === 'locked', 'failed unlock returns to locked')
+
+await passkeyStore.enrollPasskey('second root')
+assert(
+  passkeyStore.passkey.get().error?.includes('Already enrolled'),
+  'enrollment is refused once a root exists',
+)
+assert(passkeyStore.passkey.get().status === 'locked', 'refused enrollment keeps the locked state')
+
+/* Escape goes to the topmost open layer — close the link modal first */
+click(linkModal.querySelector('[data-link-close]'))
+key(document, 'Escape')
+assert(authModal.classList.contains('hidden'), 'escape closes the passkeys modal')
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed')
 process.exit(failures ? 1 : 0)
