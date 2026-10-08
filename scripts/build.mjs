@@ -16,7 +16,7 @@ cpSync(join(root, 'src'), join(out, 'src'), {
   filter: (source) => !source.endsWith(`${sep}styles.css`),
 })
 
-const result = spawnSync('pnpm', ['exec', '@tailwindcss/cli', '-i', './src/styles.css', '-o', './out/styles.css', '--minify'], {
+const result = spawnSync('npx', ['@tailwindcss/cli', '-i', './src/styles.css', '-o', './out/styles.css', '--minify'], {
   cwd: root,
   stdio: 'inherit',
 })

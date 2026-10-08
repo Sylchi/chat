@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 
-const tailwind = spawn('pnpm', ['exec', '@tailwindcss/cli', '-i', './src/styles.css', '-o', './styles.css', '--watch'], {
+const tailwind = spawn('npx', ['@tailwindcss/cli', '-i', './src/styles.css', '-o', './styles.css', '--watch'], {
   cwd: root,
   stdio: 'inherit',
 })

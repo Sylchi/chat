@@ -1,8 +1,7 @@
 {
-  "name": "my-project",
+  "name": "chat",
   "version": "0.1.0",
   "private": true,
-  "packageManager": "pnpm@12.3.4",
   "type": "module",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -13,7 +12,7 @@
     "@tailwindcss/cli": "^4.3.3",
     "tailwindcss": "^4.3.3"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": ["@parcel/watcher"]
+  "allowScripts": {
+    "@parcel/watcher@2.5.1": true
   }
 }
