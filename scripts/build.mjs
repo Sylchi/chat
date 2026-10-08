@@ -15,6 +15,7 @@ cpSync(join(root, 'src'), join(out, 'src'), {
   recursive: true,
   filter: (source) => !source.endsWith(`${sep}styles.css`),
 })
+cpSync(join(root, 'lib'), join(out, 'lib'), { recursive: true })
 
 const result = spawnSync('npx', ['@tailwindcss/cli', '-i', './src/styles.css', '-o', './out/styles.css', '--minify'], {
   cwd: root,

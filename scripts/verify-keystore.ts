@@ -1,6 +1,6 @@
-import { hkdf, bytesOf } from '../lib/crypto.ts'
-import { memoryStore, enrollFromPrf, unlockFromPrf, loadUserRecord } from '../lib/keystore.ts'
-import { unwrapDevice } from '../lib/identity.ts'
+import { hkdf, bytesOf } from '../lib/crypto.js'
+import { memoryStore, enrollFromPrf, unlockFromPrf, loadUserRecord } from '../lib/keystore.js'
+import { unwrapDevice } from '../lib/identity.js'
 
 async function main() {
   let ok = true

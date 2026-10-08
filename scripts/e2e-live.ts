@@ -2,8 +2,8 @@
 // service mailbox on the VPS. Uses Node's global WebSocket (Node 22+).
 export {}
 
-import { mailboxPut, mailboxGet } from '../lib/mesh.ts'
-import { wsBridgeTransport } from '../lib/transports/ws-bridge.ts'
+import { mailboxPut, mailboxGet } from '../lib/mesh.js'
+import { wsBridgeTransport } from '../lib/transports/ws-bridge.js'
 
 const ENDPOINT = 'ws://172.245.67.49:9002'
 const ONION = 'iuo7ihvk3amugvqswhlaewgmyhrl5dnk6cmb757dyxslocrcco4xjpad.onion'

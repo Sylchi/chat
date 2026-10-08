@@ -1,4 +1,4 @@
-import { sha3_256, base32Encode, onionAddress, onionAddressFromBase32 } from '../lib/onion.ts'
+import { sha3_256, base32Encode, onionAddress, onionAddressFromBase32 } from '../lib/onion.js'
 import { createHash } from 'node:crypto'
 
 async function main() {

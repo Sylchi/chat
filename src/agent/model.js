@@ -1,10 +1,12 @@
 import { atom } from '../vendor/store.js'
+import { detectWebGPU } from '../lib/detect.js'
 
 const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1'
 const DEFAULT_MODEL = 'onnx-community/Qwen2.5-0.5B-Instruct'
 const PREF_KEY = 's:agent-model'
 const HANDLE_KEY = 'model-dir'
 const IDB_NAME = 's-agent'
+const CACHED_KEY = 's:agent-model-loaded'
 const SYSTEM_PROMPT =
   'You are S, a private assistant that runs entirely on the user’s device. Never claim to send data anywhere. Be warm, concise and concrete.'
 
@@ -33,9 +35,26 @@ export const agentModel = atom({
   file: '',
   error: '',
   folder: '',
+  adapter: '',
 })
 
 export const agentBusy = atom(false)
+
+// Cooperative stop: the streamer drops chunks immediately and (when the loaded
+// transformers build supports custom stopping criteria) generation truly halts.
+let stopRequested = false
+
+export function requestStop() {
+  stopRequested = true
+}
+
+export function hasCachedModel() {
+  try {
+    return localStorage.getItem(CACHED_KEY) === '1'
+  } catch {
+    return false
+  }
+}
 
 let transformers = null
 let generator = null
@@ -54,18 +73,23 @@ function persist() {
   }
 }
 
+function deviceLabel(state) {
+  if (state.device !== 'webgpu') return 'WASM'
+  return `WebGPU${state.adapter ? ` · ${state.adapter}` : ''}`
+}
+
 export function agentStatusText(state = agentModel.get()) {
   if (state.status === 'loading') return state.total ? `Downloading ${state.percent}%` : 'Loading model…'
-  if (state.status === 'ready') return `Ready · ${state.device === 'webgpu' ? 'WebGPU' : 'WASM'}`
+  if (state.status === 'ready') return `Ready · ${deviceLabel(state)}`
   if (state.status === 'error') return 'Model failed to load'
   return 'No model loaded'
 }
 
 export function agentPreviewText(state = agentModel.get()) {
   if (state.status === 'loading') return state.total ? `Downloading · ${state.percent}%` : 'Loading model…'
-  if (state.status === 'ready') return `Ready · ${state.device === 'webgpu' ? 'WebGPU' : 'WASM'}`
+  if (state.status === 'ready') return `Ready · ${deviceLabel(state)}`
   if (state.status === 'error') return 'Model failed to load'
-  return 'Tap to load a local model'
+  return hasCachedModel() ? 'Cached — tap to load' : 'Tap to load a local model'
 }
 
 /* ------------------------------------------------------------------ *
@@ -271,9 +295,20 @@ export async function loadModel(options = {}) {
   persist()
   fileProgress.clear()
 
-  const device = next.device === 'webgpu' && navigator.gpu ? 'webgpu' : 'wasm'
+  let device = next.device === 'webgpu' && navigator.gpu ? 'webgpu' : 'wasm'
   let dtype = next.dtype
   if (device === 'wasm' && (dtype === 'q4f16' || dtype === 'q4')) dtype = 'quantized'
+
+  let adapter = ''
+  if (device === 'webgpu') {
+    const probe = await detectWebGPU()
+    if (!probe.supported) {
+      device = 'wasm'
+      dtype = 'quantized'
+    } else {
+      adapter = [probe.info?.vendor, probe.info?.architecture].filter(Boolean).join(' ')
+    }
+  }
 
   try {
     transformers ??= await import(TRANSFORMERS_URL)
@@ -300,7 +335,12 @@ export async function loadModel(options = {}) {
       progress_callback: onProgress,
     })
     flushProgress()
-    agentModel.set({ ...agentModel.get(), status: 'ready', device, dtype, percent: 100, error: '' })
+    agentModel.set({ ...agentModel.get(), status: 'ready', device, dtype, adapter, percent: 100, error: '' })
+    try {
+      localStorage.setItem(CACHED_KEY, '1')
+    } catch {
+      /* cache flag is best-effort */
+    }
   } catch (error) {
     generator = null
     agentModel.set({ ...agentModel.get(), status: 'error', error: friendlyError(error, device) })
@@ -337,9 +377,12 @@ function extractReply(output) {
   return ''
 }
 
-export async function generateAgentReply(history, { onToken } = {}) {
+export async function generateAgentReply(history, { onToken, onDone } = {}) {
   if (agentModel.get().status !== 'ready' || !generator) throw new Error('No model is loaded yet.')
+  stopRequested = false
   agentBusy.set(true)
+  const started = performance.now()
+  let tokens = 0
   try {
     const messages = [
       { role: 'system', content: SYSTEM_PROMPT },
@@ -355,23 +398,44 @@ export async function generateAgentReply(history, { onToken } = {}) {
     let output = null
     if (onToken) {
       try {
-        const { TextStreamer } = transformers
+        const { TextStreamer, StoppingCriteria, StoppingCriteriaList } = transformers
+        const stopping = (() => {
+          try {
+            const Stop = class extends StoppingCriteria {}
+            Stop.prototype._call = function stopIfRequested() {
+              return [stopRequested]
+            }
+            const list = new StoppingCriteriaList()
+            list.push(new Stop())
+            return list
+          } catch {
+            return null
+          }
+        })()
         const streamer = new TextStreamer(generator.tokenizer, {
           skip_prompt: true,
           skip_special_tokens: true,
           callback_function: (chunk) => {
-            if (chunk) onToken(chunk)
+            if (!chunk || stopRequested) return
+            tokens += 1
+            onToken(chunk)
           },
         })
-        output = await generator(messages, { ...base, streamer })
+        output = await generator(messages, {
+          ...base,
+          streamer,
+          ...(stopping ? { stopping_criteria: stopping } : {}),
+        })
       } catch (error) {
-        if (!/streamer/i.test(error?.message ?? '')) throw error
+        if (!/streamer|criteria/i.test(error?.message ?? '')) throw error
         output = null
       }
     }
     output ??= await generator(messages, base)
     return extractReply(output)
   } finally {
+    const elapsed = Math.max(0.001, (performance.now() - started) / 1000)
+    onDone?.({ tokens, seconds: elapsed })
     agentBusy.set(false)
   }
 }

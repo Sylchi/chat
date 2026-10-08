@@ -1,10 +1,33 @@
 import { atom } from './vendor/store.js'
 
-export const activeNav = atom('Inbox')
-export const activeChat = atom('Maya Chen')
-export const draft = atom('')
+// Atom that mirrors its value to localStorage on every set. Corrupt or
+// unavailable storage falls back to the in-memory value without crashing.
+export function persistentAtom(key, initial) {
+  let value = initial
+  try {
+    const raw = localStorage.getItem(key)
+    if (raw != null) value = JSON.parse(raw)
+  } catch {
+    value = initial
+  }
+  const store = atom(value)
+  const originalSet = store.set.bind(store)
+  store.set = (next) => {
+    originalSet(next)
+    try {
+      localStorage.setItem(key, JSON.stringify(next))
+    } catch {
+      // storage full / unavailable — keep in-memory state
+    }
+  }
+  return store
+}
 
-export const threads = atom({
+export const activeNav = persistentAtom('s:active-nav', 'Inbox')
+export const activeChat = persistentAtom('s:active-chat', 'Maya Chen')
+export const draft = persistentAtom('s:draft', '')
+
+export const threads = persistentAtom('s:threads', {
   'Maya Chen': [
     { from: 'them', text: 'Hey! I just finished editing the gallery from Saturday.', time: '10:36' },
     { from: 'me', text: 'Oh nice, I can’t wait to see it. The light was perfect that day.', time: '10:37' },
@@ -30,6 +53,7 @@ export function updateMessage(chat, id, patch) {
 export const showLink = atom(false)
 export const showAuth = atom(false)
 export const sharedFiles = atom([])
-export const sidebarCollapsed = atom(false)
+export const sidebarCollapsed = persistentAtom('s:sidebar-collapsed', false)
 export const mobileSidebarOpen = atom(false)
-export const completedTasks = atom([])
+export const chatsDrawerOpen = atom(false)
+export const completedTasks = persistentAtom('s:tasks', [])

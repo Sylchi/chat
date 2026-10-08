@@ -31,6 +31,7 @@ import { devicesView } from './devices.js'
 import {
   activeChat,
   activeNav,
+  chatsDrawerOpen,
   mobileSidebarOpen,
   sidebarCollapsed,
   showAuth,
@@ -178,6 +179,7 @@ export function initWorkspace(root) {
               <div><p id="header-overline" class="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">${esc(activeNav.get())}</p><h1 class="text-lg font-semibold tracking-tight">Good morning, Alex</h1></div>
             </div>
             <div class="flex items-center gap-2">
+              <button data-role="chats" aria-label="Open chats" class="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-accent lg:hidden">${icon(MessageCircle, 'size-3.5')}<span class="hidden sm:inline">Chats</span></button>
               <button class="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:flex">${icon(Search, 'size-3.5')}Search <kbd class="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘ K</kbd></button>
               <button class="relative rounded-xl p-2.5 text-muted-foreground hover:bg-accent">${icon(Bell)}<span class="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500"></span></button>
               ${avatar('AR', 'bg-cyan-200 text-cyan-900', false, true)}
@@ -202,6 +204,21 @@ export function initWorkspace(root) {
         </section>
 
       </div>
+
+      <div data-chat-overlay class="fixed inset-0 z-40 bg-foreground/25 backdrop-blur-sm hidden lg:hidden"></div>
+      <aside data-chat-drawer aria-label="Recent chats" class="fixed inset-y-0 right-0 z-50 flex w-[82vw] max-w-[320px] flex-col border-l border-border bg-card p-4 shadow-2xl transition-transform duration-200 translate-x-full lg:hidden">
+        <div class="mb-4 flex items-center justify-between">
+          <p class="text-sm font-semibold">Recent chats</p>
+          <button data-chat-close aria-label="Close chats" class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(X)}</button>
+        </div>
+        <div class="flex-1 overflow-y-auto"><div class="flex flex-col gap-1">
+          ${chats.map(chatButton).join('')}
+        </div></div>
+        <button data-nav-custom="devices" class="mt-4 rounded-xl border border-border bg-muted/40 p-3 text-left text-[11px] text-muted-foreground hover:bg-accent">
+          <span class="flex items-center gap-2 text-xs font-medium text-foreground">${icon(Wifi, 'size-3.5 text-emerald-600')}2 devices synced</span>
+          <span class="mt-1 block">Your messages, files and calls stay yours.</span>
+        </button>
+      </aside>
 
       <div data-modal="auth" class="fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm hidden">
         <div role="dialog" aria-modal="true" class="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl">
@@ -306,6 +323,15 @@ export function initWorkspace(root) {
     mobileNav.classList.toggle('translate-x-0', open)
   }
 
+  const chatOverlay = root.querySelector('[data-chat-overlay]')
+  const chatDrawer = root.querySelector('[data-chat-drawer]')
+
+  function applyChatDrawer(open) {
+    chatOverlay.classList.toggle('hidden', !open)
+    chatDrawer.classList.toggle('translate-x-full', !open)
+    chatDrawer.classList.toggle('translate-x-0', open)
+  }
+
   let activeRegion = null
   function renderRegion() {
     activeRegion?.destroy?.()
@@ -353,6 +379,20 @@ export function initWorkspace(root) {
   mobileNav.querySelector('[data-mobile-close]').addEventListener('click', () => mobileSidebarOpen.set(false))
   root.querySelector('[data-role="menu"]').addEventListener('click', () => mobileSidebarOpen.set(true))
 
+  root.querySelector('[data-role="chats"]').addEventListener('click', () => {
+    mobileSidebarOpen.set(false)
+    chatsDrawerOpen.set(true)
+  })
+  chatOverlay.addEventListener('click', () => chatsDrawerOpen.set(false))
+  chatDrawer.querySelector('[data-chat-close]').addEventListener('click', () => chatsDrawerOpen.set(false))
+  chatDrawer.addEventListener('click', (event) => {
+    const chatBtn = event.target.closest('[data-chat]')
+    if (!chatBtn) return
+    activeChat.set(chatBtn.dataset.chat ?? '')
+    activeNav.set('Inbox')
+    chatsDrawerOpen.set(false)
+  })
+
   const chatList = root.querySelector('[data-chat-list]')
   chatList?.addEventListener('click', (event) => {
     const target = event.target
@@ -375,13 +415,15 @@ export function initWorkspace(root) {
 
   window.addEventListener('keydown', (event) => {
     if (event.key !== 'Escape') return
-    if (mobileSidebarOpen.get()) mobileSidebarOpen.set(false)
+    if (chatsDrawerOpen.get()) chatsDrawerOpen.set(false)
+    else if (mobileSidebarOpen.get()) mobileSidebarOpen.set(false)
     else if (showLink.get()) showLink.set(false)
     else if (showAuth.get()) showAuth.set(false)
   })
 
   sidebarCollapsed.subscribe(applyCollapsed)
   mobileSidebarOpen.subscribe(applyMobile)
+  chatsDrawerOpen.subscribe(applyChatDrawer)
   agentModel.subscribe((state) => {
     const preview = chatList?.querySelector('[data-agent-preview]')
     if (preview) preview.textContent = agentPreviewText(state)

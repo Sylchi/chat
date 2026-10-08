@@ -4,7 +4,7 @@ import {
   parseGetReply,
   readUntilClose,
   type ByteStream,
-} from '../lib/mesh.ts'
+} from '../lib/mesh.js'
 export {}
 
 // ---- in-memory fake mailbox tunnel, mirroring mailbox.c framing ----

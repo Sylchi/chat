@@ -1,4 +1,4 @@
-import { ed25519Keypair, x25519Keypair, x25519SharedSecret, hkdf, aesGcmEncrypt, aesGcmDecrypt, ed25519Sign, toBase64Url, fromBase64Url, u8, bytesOf } from '../lib/crypto.ts'
+import { ed25519Keypair, x25519Keypair, x25519SharedSecret, hkdf, aesGcmEncrypt, aesGcmDecrypt, ed25519Sign, toBase64Url, fromBase64Url, u8, bytesOf } from '../lib/crypto.js'
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSign, verify as nodeVerify, diffieHellman } from 'node:crypto'
 
 async function main() {

@@ -8,7 +8,7 @@ import {
   hkdf,
   sha256,
   bytesOf,
-} from '../lib/identity.ts'
+} from '../lib/identity.js'
 
 async function main() {
   let ok = true

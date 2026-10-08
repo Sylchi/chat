@@ -28,8 +28,10 @@ import {
   agentModel,
   agentStatusText,
   generateAgentReply,
+  hasCachedModel,
   loadModel,
   pickLocalDirectory,
+  requestStop,
   restoreLocalDirectory,
   unloadModel,
 } from '../agent/model.js'
@@ -57,13 +59,14 @@ function renderMessage(message, meta) {
     message.action === 'load-model'
       ? `<button data-action="open-model" class="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground">${icon(Download, 'size-3')}Load a model</button>`
       : ''
+  const stats = message.stats ? ` · ${esc(message.stats)}` : ''
   return `
     <div class="flex items-end gap-2 ${fromMe ? 'justify-end' : ''}">
       ${fromMe ? '' : avatar(meta.initials, meta.color, meta.online)}
       <div class="max-w-[78%] rounded-2xl px-4 py-3 text-sm ${fromMe ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md bg-muted'}">
         ${body}${action}
         <div class="mt-1.5 flex items-center justify-end gap-1 text-[10px] ${fromMe ? 'text-primary-foreground/65' : 'text-muted-foreground'}">
-          ${esc(message.time)}${fromMe ? icon(Check, 'size-3') : ''}
+          ${esc(message.time)}${fromMe ? icon(Check, 'size-3') : ''}${stats}
         </div>
       </div>
     </div>`
@@ -301,13 +304,14 @@ export const chatView = {
             <textarea id="composer" rows="1" placeholder="${isAgent() ? 'Ask S anything…' : 'Write a message…'}" class="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm outline-none placeholder:text-muted-foreground">${esc(draft.get())}</textarea>
             <button data-role="emoji" aria-label="Insert emoji" class="rounded-xl p-2 text-muted-foreground hover:bg-accent">${icon(Smile)}</button>
             <button class="rounded-xl p-2 text-muted-foreground hover:bg-accent">${icon(Mic)}</button>
-            <button data-role="send" aria-label="Send message" class="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground transition-transform hover:scale-105">${icon(Send)}</button>
+            <button data-role="send" aria-label="Send message" class="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground transition-transform hover:scale-105"><span data-send-icon>${icon(Send)}</span><span data-send-stop class="hidden">${icon(X, 'size-4')}</span></button>
           </div>
           ${emojiPickerHtml()}
         </div>
         ${renderChips()}
         <div data-agent-hint class="mt-2 hidden flex items-center justify-center gap-2 text-[10px] text-muted-foreground">
           <span data-agent-hint-text></span>
+          <button data-action="load-cached" class="hidden rounded-xl bg-primary px-2.5 py-1 text-[10px] font-medium text-primary-foreground">Load now</button>
           <button data-action="open-model" class="font-medium text-foreground underline underline-offset-4">Manage model</button>
         </div>
         <p class="mt-2 text-center text-[10px] text-muted-foreground">Free forever · No ads · No tracking</p>
@@ -382,8 +386,12 @@ export const chatView = {
               ? agentStatusText(state)
               : state.status === 'error'
                 ? 'Model failed to load'
-                : 'No model loaded — load one to get replies'
+                : hasCachedModel()
+                  ? 'Model is cached on this device — loads fast'
+                  : 'No model loaded — load one to get replies'
       }
+      const loadNow = root.querySelector('[data-action="load-cached"]')
+      if (loadNow) loadNow.classList.toggle('hidden', state.status !== 'idle' || !hasCachedModel())
 
       const pill = root.querySelector('[data-model-pill]')
       if (pill) {
@@ -427,7 +435,9 @@ export const chatView = {
         loadBtn.disabled = state.status === 'loading'
         loadBtn.classList.toggle('opacity-60', state.status === 'loading')
         const label = loadBtn.querySelector('span')
-        if (label) label.textContent = state.status === 'loading' ? 'Loading…' : 'Load model'
+        if (label) {
+          label.textContent = state.status === 'loading' ? 'Loading…' : hasCachedModel() ? 'Load cached model' : 'Load model'
+        }
       }
       root.querySelector('[data-role="model-unload"]')?.classList.toggle('hidden', state.status !== 'ready')
     }
@@ -521,14 +531,18 @@ export const chatView = {
         .map((message) => ({ role: message.from === 'me' ? 'user' : 'assistant', text: message.text }))
         .slice(-12)
       let streamed = ''
+      let stats = null
       try {
         const reply = await generateAgentReply(history, {
           onToken: (chunk) => {
             streamed += chunk
             updateStream(id, streamed)
           },
+          onDone: ({ tokens, seconds }) => {
+            stats = `${tokens} tokens · ${Math.round(tokens / seconds)} tok/s`
+          },
         })
-        updateMessage(AGENT_CHAT, id, { pending: false, text: reply || streamed || '…', time: 'Now' })
+        updateMessage(AGENT_CHAT, id, { pending: false, text: reply || streamed || '…', time: 'Now', stats })
       } catch (error) {
         updateMessage(AGENT_CHAT, id, {
           pending: false,
@@ -591,7 +605,13 @@ export const chatView = {
         send()
       }
     }
-    const onClickSend = () => send()
+    const onClickSend = () => {
+      if (agentBusy.get()) {
+        requestStop()
+        return
+      }
+      send()
+    }
     const onClickAttach = () => void chooseFiles()
     const onFileChange = () => handleFiles(fileInput.files)
     const onClickEmoji = (event) => {
@@ -698,6 +718,10 @@ export const chatView = {
     })
 
     hint?.addEventListener('click', (event) => {
+      if (event.target.closest('[data-action="load-cached"]')) {
+        void loadModel({}).then(syncModelUi)
+        return
+      }
       if (event.target.closest('[data-action="open-model"]')) openModelPanel()
     })
 
@@ -729,9 +753,9 @@ export const chatView = {
       }),
       agentModel.subscribe(syncModelUi),
       agentBusy.subscribe((busy) => {
-        sendBtn.classList.toggle('opacity-50', busy)
-        sendBtn.classList.toggle('pointer-events-none', busy)
-        sendBtn.setAttribute('aria-disabled', String(busy))
+        sendBtn.setAttribute('aria-label', busy ? 'Stop generating' : 'Send message')
+        sendBtn.querySelector('[data-send-icon]')?.classList.toggle('hidden', busy)
+        sendBtn.querySelector('[data-send-stop]')?.classList.toggle('hidden', !busy)
       }),
     )
 

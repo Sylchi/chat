@@ -1,7 +1,7 @@
 // Verify the SOCKS5 transport against a fake SOCKS5 proxy server (Node).
 export {}
 
-import { socks5Transport } from '../lib/transports/socks5.ts'
+import { socks5Transport } from '../lib/transports/socks5.js'
 import * as net from 'node:net'
 
 function startFakeProxy() {

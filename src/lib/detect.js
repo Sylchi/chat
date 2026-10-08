@@ -21,6 +21,21 @@ export const CATEGORY_ORDER = [
   'System',
 ]
 
+// Lightweight WebGPU probe, reused by the agent model loader (S agent needs a
+// real adapter, not just `navigator.gpu`, to avoid failing late in a download).
+export async function detectWebGPU() {
+  const nav = typeof navigator === 'undefined' ? null : navigator
+  if (!nav || !('gpu' in nav)) return { supported: false, adapter: null, info: null }
+  try {
+    const adapter = await nav.gpu.requestAdapter()
+    if (!adapter) return { supported: false, adapter: null, info: null }
+    const info = adapter.info ?? (adapter.requestAdapterInfo ? await adapter.requestAdapterInfo() : null)
+    return { supported: true, adapter, info }
+  } catch {
+    return { supported: false, adapter: null, info: null }
+  }
+}
+
 function formatBytes(bytes) {
   if (!bytes) return '0 B'
   const units = ['B', 'KB', 'MB', 'GB', 'TB']
