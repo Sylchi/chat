@@ -21,9 +21,10 @@ import {
   Sparkles,
   Wifi,
   X,
-  Zap,
 } from '../vendor/icons.js'
 import { avatar, esc, icon } from '../dom.js'
+import { AGENT_CHAT, chats } from '../chats.js'
+import { agentModel, agentPreviewText } from '../agent/model.js'
 import { chatView } from './chat.js'
 import { calendarView, contactsView, galleryView, tasksView, timelineView } from './panels.js'
 import { devicesView } from './devices.js'
@@ -32,7 +33,6 @@ import {
   activeNav,
   mobileSidebarOpen,
   sidebarCollapsed,
-  showAgent,
   showAuth,
   showLink,
 } from '../store.js'
@@ -45,13 +45,6 @@ const navItems = [
   { label: 'Tasks', icon: ListTodo, count: 4 },
   { label: 'Gallery', icon: GalleryHorizontalEnd },
   { label: 'Timeline', icon: Clock3 },
-]
-
-const chats = [
-  { name: 'Maya Chen', initials: 'MC', color: 'bg-amber-200 text-amber-900', text: 'The new photos are beautiful', time: '10:42', unread: 2, online: true },
-  { name: 'Design crew', initials: 'DC', color: 'bg-violet-200 text-violet-900', text: 'You: Sent the final deck', time: '09:18', unread: 0, online: false },
-  { name: 'Jordan Blake', initials: 'JB', color: 'bg-sky-200 text-sky-900', text: 'Video call · 23 min', time: 'Yesterday', unread: 0, online: false },
-  { name: 'Saved messages', initials: 'SM', color: 'bg-muted text-muted-foreground', text: 'Your private notes', time: '', unread: 0, online: false },
 ]
 
 const REGIONS = {
@@ -122,7 +115,7 @@ function chatButton(chat) {
     ${avatar(chat.initials, chat.color, chat.online)}
     <span class="min-w-0 flex-1">
       <span class="flex items-center justify-between gap-2"><span class="truncate text-sm font-medium">${esc(chat.name)}</span><span class="text-[10px] text-muted-foreground">${esc(chat.time)}</span></span>
-      <span class="flex items-center justify-between gap-2"><span class="truncate text-xs text-muted-foreground">${esc(chat.text)}</span>${chat.unread > 0 ? `<span class="grid size-4 place-items-center rounded-full bg-primary text-[9px] text-primary-foreground">${chat.unread}</span>` : ''}</span>
+      <span class="flex items-center justify-between gap-2"><span class="truncate text-xs text-muted-foreground"${chat.agent ? ' data-agent-preview' : ''}>${esc(chat.text)}</span>${chat.unread > 0 ? `<span class="grid size-4 place-items-center rounded-full bg-primary text-[9px] text-primary-foreground">${chat.unread}</span>` : ''}</span>
     </span>
   </button>`
 }
@@ -153,6 +146,7 @@ export function initWorkspace(root) {
               ${icon(Menu)}
               <span data-side-hide>Collapse sidebar</span>
             </button>
+            ${bottomButton('S agent', 'agent', Sparkles)}
             ${bottomButton('Devices', 'devices', MonitorSmartphone)}
             ${bottomButton('Passkeys', 'auth', Fingerprint)}
             ${bottomButton('Link a device', 'link', Link2)}
@@ -171,6 +165,7 @@ export function initWorkspace(root) {
             ${navItems.map(mobileNavButton).join('')}
           </nav>
           <div class="mt-auto border-t border-border pt-4">
+            <button data-nav-custom="agent" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">${icon(Sparkles)}<span>S agent</span></button>
             <button data-nav-custom="link" class="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">${icon(Link2)}<span>Link a device</span></button>
             <div class="mt-3 flex items-center gap-2 px-3 text-[11px] text-muted-foreground">${icon(ShieldCheck, 'size-3.5 text-emerald-600')}End-to-end encrypted</div>
           </div>
@@ -206,28 +201,6 @@ export function initWorkspace(root) {
           </div>
         </section>
 
-        <aside id="agent-rail" class="hidden min-h-0 w-[284px] shrink-0 border-l border-border bg-muted/20 xl:flex xl:flex-col">
-          <div class="flex items-center justify-between border-b border-border px-5 py-5">
-            <div class="flex items-center gap-2">
-              <div class="grid size-8 place-items-center rounded-xl bg-violet-100 text-violet-700">${icon(Sparkles)}</div>
-              <div><p class="text-sm font-semibold">S agent</p><p class="text-[10px] text-emerald-600">Running locally · WebGPU</p></div>
-            </div>
-            <button data-agent-close class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(X)}</button>
-          </div>
-          <div class="flex-1 overflow-y-auto p-5">
-            <div class="rounded-2xl bg-gradient-to-br from-violet-50 to-indigo-50 p-4 dark:from-violet-950/30 dark:to-indigo-950/30">
-              <p class="text-sm font-medium leading-relaxed">“I’m here whenever you need me. Your data never leaves this device.”</p>
-              <div class="mt-3 flex items-center gap-1.5 text-[10px] text-violet-700 dark:text-violet-300">${icon(Zap, 'size-3')}Private by design</div>
-            </div>
-            <p class="mb-3 mt-7 text-[11px] font-semibold uppercase tracking-[0.15em] text-muted-foreground">Suggested for you</p>
-            <div class="flex flex-col gap-2">
-              <button class="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left text-xs hover:bg-accent">${icon(CalendarDays, 'size-4 text-muted-foreground')}<span><span class="block font-medium">Plan my week</span><span class="text-[10px] text-muted-foreground">Organize your calendar</span></span></button>
-              <button class="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left text-xs hover:bg-accent">${icon(ListTodo, 'size-4 text-muted-foreground')}<span><span class="block font-medium">Triage my tasks</span><span class="text-[10px] text-muted-foreground">4 items need attention</span></span></button>
-              <button class="flex items-center gap-3 rounded-xl border border-border bg-card p-3 text-left text-xs hover:bg-accent">${icon(GalleryHorizontalEnd, 'size-4 text-muted-foreground')}<span><span class="block font-medium">Find a memory</span><span class="text-[10px] text-muted-foreground">Search your timeline</span></span></button>
-            </div>
-          </div>
-          <div class="border-t border-border p-5"><button class="flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card py-2.5 text-xs font-medium hover:bg-accent">${icon(MessageCircle, 'size-3.5')}Ask S anything</button></div>
-        </aside>
       </div>
 
       <div data-modal="auth" class="fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm hidden">
@@ -261,7 +234,6 @@ export function initWorkspace(root) {
 
   const sidebar = root.querySelector('[data-desktop-sidebar]')
   const region = root.querySelector('[data-role="region"]')
-  const agentRail = root.querySelector('#agent-rail')
   const authModal = root.querySelector('[data-modal="auth"]')
   const linkModal = root.querySelector('[data-modal="link"]')
   const mobileNav = root.querySelector('[data-mobile-sidebar]')
@@ -326,8 +298,6 @@ export function initWorkspace(root) {
       btn.classList.toggle('bg-accent', active)
       btn.classList.toggle('hover:bg-muted/60', !active)
     }
-    const title = document.getElementById('chat-title')
-    if (title) title.textContent = current
   }
 
   function applyMobile(open) {
@@ -345,6 +315,11 @@ export function initWorkspace(root) {
     view.init?.(region)
   }
 
+  function openAgentChat() {
+    activeChat.set(AGENT_CHAT)
+    activeNav.set('Inbox')
+  }
+
   sidebar.addEventListener('click', (event) => {
     const target = event.target
     const button = target.closest('[data-role="collapse"], [data-nav], [data-nav-custom]')
@@ -357,7 +332,8 @@ export function initWorkspace(root) {
       activeNav.set(button.dataset.nav)
       return
     }
-    if (button.dataset.navCustom === 'devices') activeNav.set('Devices')
+    if (button.dataset.navCustom === 'agent') openAgentChat()
+    else if (button.dataset.navCustom === 'devices') activeNav.set('Devices')
     else if (button.dataset.navCustom === 'auth') showAuth.set(true)
     else if (button.dataset.navCustom === 'link') void connectDevice()
   })
@@ -367,8 +343,9 @@ export function initWorkspace(root) {
     const button = target.closest('[data-nav], [data-nav-custom]')
     if (!button) return
     const custom = button.dataset.navCustom
-    if (button.dataset.nav || custom === 'link') mobileSidebarOpen.set(false)
+    if (button.dataset.nav || custom === 'agent' || custom === 'link') mobileSidebarOpen.set(false)
     if (button.dataset.nav) activeNav.set(button.dataset.nav)
+    else if (custom === 'agent') openAgentChat()
     else if (custom === 'link') void connectDevice()
   })
 
@@ -382,13 +359,12 @@ export function initWorkspace(root) {
     const chatBtn = target.closest('[data-chat]')
     if (chatBtn) {
       activeChat.set(chatBtn.dataset.chat ?? '')
+      activeNav.set('Inbox')
       return
     }
     const devicesBtn = target.closest('[data-nav-custom="devices"]')
     if (devicesBtn) activeNav.set('Devices')
   })
-
-  agentRail.querySelector('[data-agent-close]').addEventListener('click', () => showAgent.set(false))
 
   authModal.querySelector('[data-auth-close]').addEventListener('click', () => showAuth.set(false))
   authModal.querySelector('[data-auth-key]').addEventListener('click', () => showAuth.set(false))
@@ -406,7 +382,10 @@ export function initWorkspace(root) {
 
   sidebarCollapsed.subscribe(applyCollapsed)
   mobileSidebarOpen.subscribe(applyMobile)
-  showAgent.subscribe((visible) => agentRail.classList.toggle('hidden', !visible))
+  agentModel.subscribe((state) => {
+    const preview = chatList?.querySelector('[data-agent-preview]')
+    if (preview) preview.textContent = agentPreviewText(state)
+  })
   showLink.subscribe((visible) => linkModal.classList.toggle('hidden', !visible))
   showAuth.subscribe((visible) => authModal.classList.toggle('hidden', !visible))
   activeChat.subscribe(syncChatList)

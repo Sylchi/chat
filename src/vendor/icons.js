@@ -69,6 +69,12 @@ export const Contact = [
   ["rect", { x: "3", y: "3", width: "18", height: "18", rx: "2" }]
 ];
 
+export const Download = [
+  ["path", { d: "M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" }],
+  ["path", { d: "m7 10 5 5 5-5" }],
+  ["path", { d: "M12 15V3" }]
+];
+
 export const FileImage = [
   [
     "path",
@@ -91,6 +97,13 @@ export const Fingerprint = [
   ["path", { d: "M5 19.5C5.5 18 6 15 6 12a6 6 0 0 1 .34-2" }],
   ["path", { d: "M8.65 22c.21-.66.45-1.32.57-2" }],
   ["path", { d: "M9 6.8a6 6 0 0 1 9 5.2v2" }]
+];
+
+export const FolderOpen = [
+  [
+    "path",
+    { d: "m6 14 1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" }
+  ]
 ];
 
 export const GalleryHorizontalEnd = [
@@ -284,6 +297,13 @@ export const Sparkles = [
   ["path", { d: "M20 2v4" }],
   ["path", { d: "M22 4h-4" }],
   ["circle", { cx: "4", cy: "20", r: "2" }]
+];
+
+export const Smile = [
+  ["circle", { cx: "12", cy: "12", r: "10" }],
+  ["path", { d: "M8 14s1.5 2 4 2 4-2 4-2" }],
+  ["line", { x1: "9", x2: "9.01", y1: "9", y2: "9" }],
+  ["line", { x1: "15", x2: "15.01", y1: "9", y2: "9" }]
 ];
 
 export const Speaker = [
