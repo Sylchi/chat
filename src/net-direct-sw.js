@@ -7,7 +7,7 @@ export function directSwTransport() {
   async function init() {
     if (sw) return sw
     if (!('serviceWorker' in navigator)) throw new Error('No service worker support')
-    sw = await navigator.serviceWorker.register('/sw.js')
+    sw = await navigator.serviceWorker.register(new URL('../sw.js', import.meta.url))
     await navigator.serviceWorker.ready
     return sw
   }
