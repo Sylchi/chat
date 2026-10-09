@@ -347,6 +347,11 @@ export const Video = [
   ["rect", { x: "2", y: "6", width: "14", height: "12", rx: "2" }]
 ];
 
+export const Wallet2 = [
+  ["path", { d: "M19 7V4a1 1 0 0 0-1-1H5a2 2 0 0 0 0 4h15a1 1 0 0 1 1 1v4h-3a2 2 0 0 0 0 4h3a1 1 0 0 0 1-1v-2a1 1 0 0 0-1-1" }],
+  ["path", { d: "M3 5v14a2 2 0 0 0 2 2h15a1 1 0 0 0 1-1v-4" }]
+];
+
 export const Wifi = [
   ["path", { d: "M12 20h.01" }],
   ["path", { d: "M2 8.82a15 15 0 0 1 20 0" }],

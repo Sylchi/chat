@@ -15,6 +15,7 @@ export const passkey = atom({
   status: 'unknown',
   enrolled: false,
   name: '',
+  attachment: '',
   error: null,
   session: null,
   self: null,
@@ -41,7 +42,7 @@ export async function initPasskey() {
     if (passkey.get().status === 'unlocked') return passkey.get()
     const store = await backend()
     const rec = await loadUserRecord(store)
-    patch({ enrolled: !!rec, name: rec?.name ?? '', status: rec ? 'locked' : 'unknown', error: null })
+    patch({ enrolled: !!rec, name: rec?.name ?? '', attachment: rec?.attachment ?? '', status: rec ? 'locked' : 'unknown', error: null })
   } catch (error) {
     patch({ error: friendly(error) })
   }
@@ -49,15 +50,15 @@ export async function initPasskey() {
 }
 
 /** First run: create the passkey, derive I_U, persist the user records. */
-export async function enrollPasskey(displayName = 'S user') {
+export async function enrollPasskey(displayName = 'S user', attachment = 'platform') {
   if (passkey.get().status === 'busy') return passkey.get()
   patch({ status: 'busy', error: null })
   try {
     if (passkey.get().enrolled) throw new Error('Already enrolled — unlock instead of creating a second root.')
     const store = await backend()
-    const { session, self } = await enroll(store, displayName)
+    const { session, self } = await enroll(store, displayName, attachment)
     await unlockVault(session.localKey)
-    patch({ status: 'unlocked', enrolled: true, name: displayName, session, self, error: null })
+    patch({ status: 'unlocked', enrolled: true, name: displayName, attachment, session, self, error: null })
   } catch (error) {
     const enrolled = passkey.get().enrolled
     patch({ status: enrolled ? 'locked' : 'unknown', error: friendly(error) })
@@ -66,16 +67,16 @@ export async function enrollPasskey(displayName = 'S user') {
 }
 
 /** Returning run: assert the stored credential, re-derive I_U, build a session. */
-export async function unlockPasskey() {
+export async function unlockPasskey(attachment) {
   if (passkey.get().status === 'busy') return passkey.get()
   patch({ status: 'busy', error: null })
   try {
     const store = await backend()
     const rec = await loadUserRecord(store)
     if (!rec) throw new Error('No passkey registered yet — create one first.')
-    const session = await unlock(store)
+    const session = await unlock(store, attachment)
     await unlockVault(session.localKey)
-    patch({ status: 'unlocked', enrolled: true, name: rec.name, session, self: session.self, error: null })
+    patch({ status: 'unlocked', enrolled: true, name: rec.name, attachment: rec.attachment ?? '', session, self: session.self, error: null })
   } catch (error) {
     const enrolled = passkey.get().enrolled
     patch({ status: enrolled ? 'locked' : 'unknown', error: friendly(error) })

@@ -1,8 +1,9 @@
-import { CalendarDays, Clock3, Fingerprint, GalleryHorizontalEnd, ListTodo, Plus, Trash2, X } from '../vendor/icons.js'
+import { CalendarDays, Clock3, Download, Fingerprint, FolderOpen, GalleryHorizontalEnd, ListTodo, Plus, Trash2, X } from '../vendor/icons.js'
 import { avatar, esc, formatBytes, helpWrap, icon } from '../dom.js'
 import { chatMeta } from '../chats.js'
 import { activeChat, activeNav, completedTasks, persistentAtom, showAuth, threads } from '../store.js'
-import { addContact, contacts } from '../contacts-store.js'
+import { addContact, contacts, exportCards, importText, removeContact } from '../contacts-store.js'
+import { googleConfigured, importGoogleContacts } from '../google-contacts.js'
 import { localDevice } from '../device-store.js'
 import { lockPasskey, passkey } from '../passkey-store.js'
 import { deleteMedia, getMedia, listMedia } from '../media-store.js'
@@ -25,24 +26,38 @@ export function openTaskCount() {
   return taskList.get().filter((task) => !done.includes(task)).length
 }
 
+function contactDetail(contact) {
+  const bits = []
+  const phone = contact.phones?.[0]?.value
+  const email = contact.emails?.[0]?.value
+  if (phone) bits.push(esc(phone))
+  if (email) bits.push(esc(email))
+  if (!bits.length && contact.org) bits.push(esc(contact.org))
+  return bits.join(' · ')
+}
+
 function renderContacts() {
   const list = contacts.get()
   if (!list.length) {
-    return '<p class="text-sm text-muted-foreground">No contacts yet — add someone to start a private chat.</p>'
+    return '<p class="text-sm text-muted-foreground">No contacts yet — add someone or import your address book.</p>'
   }
   return list
     .map((contact) => {
       const { initials, color } = chatMeta(contact.name)
+      const detail = contactDetail(contact)
       return `
         <article data-contact="${esc(contact.name)}" class="rounded-2xl border border-border bg-card p-4">
           <div class="flex items-start gap-3">
             ${avatar(initials, color, false)}
             <div class="min-w-0 flex-1">
-              <h3 class="font-semibold">${esc(contact.name)}</h3>
-              <p class="text-xs text-muted-foreground">Private contact · end-to-end encrypted</p>
+              <h3 class="truncate font-semibold">${esc(contact.name)}</h3>
+              ${detail ? `<p class="truncate text-xs text-muted-foreground">${detail}</p>` : '<p class="text-xs text-muted-foreground">Private contact · end-to-end encrypted</p>'}
               <p class="mt-3 truncate rounded-lg bg-muted/60 px-2.5 py-2 font-mono text-[11px] text-muted-foreground" title="${esc(contact.id)}">${esc(contact.id)}</p>
             </div>
-            <button data-message-contact="${esc(contact.name)}" class="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent">Message</button>
+            <div class="flex shrink-0 flex-col items-end gap-1.5">
+              <button data-message-contact="${esc(contact.name)}" class="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent">Message</button>
+              <button data-remove-contact="${esc(contact.id)}" aria-label="Remove ${esc(contact.name)}" class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent hover:text-rose-600">${icon(Trash2, 'size-3.5')}</button>
+            </div>
           </div>
         </article>`
     })
@@ -60,7 +75,10 @@ export const contactsView = {
           <h2 class="mt-1 text-2xl font-semibold tracking-tight">Contacts</h2>
           <p class="mt-1 text-sm text-muted-foreground">Every person has a private S ID and their own encryption keys.</p>
         </div>
-        <button data-add-contact class="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">${icon(Plus, 'size-4')}Add contact</button>
+        <div class="flex items-center gap-2">
+          <button data-import-contact class="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2.5 text-sm font-medium hover:bg-accent">${icon(Download, 'size-4')}Import</button>
+          <button data-add-contact class="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">${icon(Plus, 'size-4')}Add contact</button>
+        </div>
       </div>
       <div id="contacts-list" class="grid gap-3 sm:grid-cols-2">${renderContacts()}</div>
     </div>
@@ -81,14 +99,48 @@ export const contactsView = {
         </form>
         <p class="mt-3 text-center text-[10px] text-muted-foreground">Public keys only · the private key never leaves their device</p>
       </div>
+    </div>
+    <div data-modal="import-contact" class="hidden fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm">
+      <div role="dialog" aria-modal="true" aria-labelledby="import-contact-title" class="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl">
+        <div class="flex items-start justify-between">
+          <div>
+            <p id="import-contact-title" class="text-lg font-semibold">Import contacts</p>
+            <p class="mt-1 text-sm text-muted-foreground">Bring in vCards from Google, Apple, or any .vcf export. Anyone missing an identity gets one minted automatically.</p>
+          </div>
+          <button data-import-close aria-label="Close import" class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(X)}</button>
+        </div>
+        <div class="mt-5 flex flex-col gap-3">
+          <button data-import-google class="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-sm font-medium hover:bg-accent">${icon(Download, 'size-4')}Import from Google</button>
+          <label class="flex cursor-pointer items-center gap-2 rounded-xl border border-border bg-muted/40 px-4 py-2.5 text-sm font-medium hover:bg-accent">
+            ${icon(FolderOpen, 'size-4')}Choose a .vcf file
+            <input data-import-file type="file" accept=".vcf,text/vcard,text/x-vcard" class="hidden" />
+          </label>
+          <div class="rounded-xl border border-border bg-background p-3">
+            <label for="import-vcard-text" class="text-[11px] font-medium text-muted-foreground">Or paste vCard text</label>
+            <textarea id="import-vcard-text" data-import-text rows="4" placeholder="BEGIN:VCARD&#10;FN:Amara Okafor&#10;END:VCARD" class="mt-1 w-full resize-none rounded-xl border border-border bg-muted/40 p-2.5 font-mono text-[10px] outline-none focus:ring-2 focus:ring-ring/20"></textarea>
+            <button data-import-paste class="mt-2 w-full rounded-xl bg-primary py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Import pasted contacts</button>
+          </div>
+          <p data-import-status role="status" class="hidden rounded-xl bg-emerald-500/10 p-2.5 text-[11px] text-emerald-600"></p>
+          <p data-import-error role="alert" class="hidden rounded-xl bg-rose-500/10 p-2.5 text-[11px] text-rose-600"></p>
+        </div>
+        <div class="mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
+          <button data-export-contact class="text-[11px] font-medium text-foreground underline underline-offset-4">Export all as .vcf</button>
+          <span class="text-[10px] text-muted-foreground">vCard 4.0</span>
+        </div>
+      </div>
     </div>`,
   init: (root) => {
     const list = root.querySelector('#contacts-list')
     const modal = root.querySelector('[data-modal="contact"]')
+    const importModal = root.querySelector('[data-modal="import-contact"]')
     const form = root.querySelector('[data-contact-form]')
     const nameInput = root.querySelector('[data-contact-name]')
     const errorBox = root.querySelector('[data-contact-error]')
     const createBtn = root.querySelector('[data-contact-create]')
+    const importFile = root.querySelector('[data-import-file]')
+    const importTextArea = root.querySelector('[data-import-text]')
+    const importStatus = root.querySelector('[data-import-status]')
+    const importError = root.querySelector('[data-import-error]')
     const cleanups = []
     let lastTrigger = null
     let creating = false
@@ -112,18 +164,65 @@ export const contactsView = {
       lastTrigger?.focus?.()
     }
 
+    const openImport = (trigger) => {
+      lastTrigger = trigger
+      importModal.classList.remove('hidden')
+      importStatus.classList.add('hidden')
+      importError.classList.add('hidden')
+    }
+
+    const closeImport = () => {
+      importModal.classList.add('hidden')
+      lastTrigger?.focus?.()
+    }
+
+    const setImportStatus = (text) => {
+      importStatus.textContent = text
+      importStatus.classList.remove('hidden')
+      importError.classList.add('hidden')
+    }
+
+    const setImportError = (error) => {
+      importError.textContent = error instanceof Error ? error.message : String(error)
+      importError.classList.remove('hidden')
+      importStatus.classList.add('hidden')
+    }
+
+    const runImport = async (fn) => {
+      try {
+        const result = await fn()
+        setImportStatus(`Imported ${result.added} new${result.merged ? ` · updated ${result.merged}` : ''}`)
+      } catch (error) {
+        setImportError(error)
+      }
+    }
+
     const onRootClick = (event) => {
-      const messageBtn = event.target.closest('[data-message-contact]')
+      const target = event.target
+      const messageBtn = target.closest('[data-message-contact]')
       if (messageBtn) {
         activeChat.set(messageBtn.dataset.messageContact ?? '')
         activeNav.set('Inbox')
         return
       }
-      if (event.target.closest('[data-add-contact]')) {
-        open(event.target.closest('[data-add-contact]'))
+      const removeBtn = target.closest('[data-remove-contact]')
+      if (removeBtn) {
+        void removeContact(removeBtn.dataset.removeContact)
         return
       }
-      if (event.target.closest('[data-contact-close]') || event.target === modal) close()
+      if (target.closest('[data-add-contact]')) {
+        open(target.closest('[data-add-contact]'))
+        return
+      }
+      if (target.closest('[data-import-contact]')) {
+        openImport(target.closest('[data-import-contact]'))
+        return
+      }
+      if (target.closest('[data-import-close]') || target === importModal) {
+        closeImport()
+        return
+      }
+      if (target.closest('[data-contact-close]') || target === modal) close()
     }
 
     const create = async () => {
@@ -148,9 +247,62 @@ export const contactsView = {
       }
     }
 
+    const onImportFile = async (event) => {
+      const file = event.target.files?.[0]
+      if (!file) return
+      setImportStatus('Reading…')
+      try {
+        const text = await file.text()
+        await runImport(() => importText(text))
+      } catch (error) {
+        setImportError(error)
+      }
+      event.target.value = ''
+    }
+
+    const onImportPaste = () => {
+      const text = importTextArea.value.trim()
+      if (!text) {
+        setImportError(new Error('Paste a vCard first'))
+        return
+      }
+      void runImport(async () => {
+        const result = await importText(text)
+        importTextArea.value = ''
+        return result
+      })
+    }
+
+    const onImportGoogle = () => {
+      if (!googleConfigured()) {
+        setImportError(new Error('Set window.S_GOOGLE_CLIENT_ID to enable Google import — or choose a .vcf file.'))
+        return
+      }
+      void runImport(() => {
+        setImportStatus('Signing in to Google…')
+        return importGoogleContacts()
+      })
+    }
+
+    const onExport = () => {
+      const text = exportCards()
+      if (!text || typeof Blob === 'undefined') return
+      const url = URL.createObjectURL(new Blob([text], { type: 'text/vcard' }))
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = 's-contacts.vcf'
+      document.body.appendChild(anchor)
+      anchor.click()
+      anchor.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    }
+
     const onDocumentKeydown = (event) => {
       if (event.key !== 'Escape') return
-      if (!modal.classList.contains('hidden')) {
+      if (!importModal.classList.contains('hidden')) {
+        event.stopPropagation()
+        closeImport()
+      } else if (!modal.classList.contains('hidden')) {
         event.stopPropagation()
         close()
       }
@@ -165,6 +317,11 @@ export const contactsView = {
       event.preventDefault()
       void create()
     })
+    importFile.addEventListener('change', onImportFile)
+    importTextArea.addEventListener('input', () => importError.classList.add('hidden'))
+    root.querySelector('[data-import-paste]').addEventListener('click', onImportPaste)
+    root.querySelector('[data-import-google]').addEventListener('click', onImportGoogle)
+    root.querySelector('[data-export-contact]').addEventListener('click', onExport)
     document.addEventListener('keydown', onDocumentKeydown, true)
     cleanups.push(
       contacts.subscribe(render),

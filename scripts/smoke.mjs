@@ -147,7 +147,7 @@ initWorkspace(app)
 /* 1. rail removed, agent is a chat now */
 assert(!document.querySelector('#agent-rail'), 'agent rail overlay removed')
 assert(document.querySelector('[data-chat="S agent"]'), 'S agent appears in chat list')
-assert(document.querySelector('[data-desktop-sidebar] [data-nav-custom="agent"]'), 'sidebar has S agent button')
+assert(document.querySelector('[data-desktop-sidebar] [data-nav="Inbox"]'), 'sidebar uses the single nav list')
 assert(document.querySelector('[data-chat="S agent"] [data-agent-preview]'), 'agent chat list row has live preview')
 
 /* 2. open agent chat */
@@ -250,10 +250,10 @@ assert(document.querySelector('[data-model-progress-bar]')?.style.width === '50%
 agentModel.set({ ...agentModel.get(), status: 'error', error: 'GPU ran out of memory' })
 assert(document.querySelector('[data-model-error]')?.textContent === 'GPU ran out of memory', 'error surfaced in panel')
 
-/* 10. sidebar agent button */
+/* 10. reopening the agent chat from the chat list */
 agentModel.set({ ...agentModel.get(), status: 'idle', error: '', percent: 0, total: 0, loaded: 0, file: '' })
-click(document.querySelector('[data-desktop-sidebar] [data-nav-custom="agent"]'))
-assert(document.getElementById('chat-title')?.textContent === 'S agent', 'sidebar button opens agent chat')
+click(document.querySelector('[data-chat="S agent"]'))
+assert(document.getElementById('chat-title')?.textContent === 'S agent', 'chat list opens the agent chat')
 
 /* 11. contacts view still wires into chats */
 const contactsStore = await import('../src/contacts-store.js')
@@ -292,8 +292,21 @@ assert(chatDrawer.classList.contains('translate-x-full'), 'escape closes chat dr
 /* 13b. M1 honest-data panels: honest device copy, calendar, tasks, settings */
 const syncSpan = document.querySelector('[data-device-count]')
 assert(!!syncSpan && syncSpan.textContent === 'This device', 'device copy is honest (no fake “synced” claims)')
+assert(
+  !document.querySelector('[data-desktop-sidebar] [data-side-row="profile"]'),
+  'no fake profile row in the sidebar',
+)
+assert(!!document.getElementById('header-greeting'), 'header shows a neutral greeting, not a fake name')
 
-click(document.querySelector('[data-desktop-sidebar] [data-nav-custom="settings"]'))
+click(document.querySelector('[data-role="account"]'))
+const accountMenu = document.querySelector('[data-account-menu]')
+assert(!accountMenu.hidden, 'account avatar opens the context menu')
+assert(!!accountMenu.querySelector('[data-account-device]'), 'account menu surfaces this device')
+click(accountMenu.querySelector('[data-theme-option="dark"]'))
+assert(document.documentElement.classList.contains('dark'), 'appearance > Dark applies the dark class')
+click(accountMenu.querySelector('[data-theme-option="system"]'))
+assert(!document.documentElement.classList.contains('dark'), 'appearance > System returns to the OS theme')
+click(accountMenu.querySelector('[data-account-action="settings"]'))
 assert(document.body.textContent.includes('At-rest encryption'), 'Settings view renders')
 assert(
   document.querySelector('[data-settings-device]').textContent.includes('Initializing device…') ||
@@ -406,6 +419,31 @@ const addedSam = await waitFor(() => contactsStore.contactByName('Sam Rivera'))
 assert(!!addedSam && addedSam.userPub.length === 32, 'Add contact mints a full identity')
 assert(!!document.querySelector('[data-chat="Sam Rivera"]'), 'new contact appears in the chat list')
 
+/* 15b2. import contacts from vCard text (Google/Apple export format) */
+click(document.querySelector('[data-nav="Contacts"]'))
+click(document.querySelector('[data-import-contact]'))
+const importModal = document.querySelector('[data-modal="import-contact"]')
+assert(!importModal.classList.contains('hidden'), 'Import contacts modal opens')
+const vcard = [
+  'BEGIN:VCARD',
+  'VERSION:3.0',
+  'FN:Nadia Okafor',
+  'N:Okafor;Nadia;;;',
+  'EMAIL;TYPE=HOME:nadia@example.com',
+  'TEL;TYPE=CELL:+1-555-0142',
+  'END:VCARD',
+].join('\r\n')
+type(importModal.querySelector('[data-import-text]'), vcard)
+click(importModal.querySelector('[data-import-paste]'))
+const imported = await waitFor(() => contactsStore.contactByName('Nadia Okafor'))
+assert(!!imported && imported.userPub.length === 32, 'imported vCard gets a minted S identity')
+assert(imported.emails[0].value === 'nadia@example.com', 'imported vCard keeps standard fields')
+assert(!!document.querySelector('[data-chat="Nadia Okafor"]'), 'imported contact appears in the chat list')
+key(document, 'Escape')
+assert(importModal.classList.contains('hidden'), 'escape closes the import modal')
+assert(contactsStore.exportCards().includes('Nadia Okafor'), 'export produces vCard text for imported contacts')
+click(document.querySelector('[data-nav="Inbox"]'))
+
 /* 15c. outgoing messages to a contact are sealed end-to-end */
 const composer2 = document.getElementById('composer')
 const sendBtn2 = document.querySelector('[data-role="send"]')
@@ -428,13 +466,14 @@ assert(
   'device material lives in IndexedDB, not localStorage',
 )
 
-/* open the Link a device modal; Bluetooth is gated in this headless env */
-click(document.querySelector('[data-nav-custom="link"]'))
+/* open the Link a device modal from the Devices view */
+click(document.querySelector('[data-nav="Devices"]'))
+await flush()
+click(document.querySelector('#dev-link'))
 await flush()
 const linkModal = document.querySelector('[data-modal="link"]')
 assert(!linkModal.classList.contains('hidden'), 'Link a device modal opens')
-const linkBt = linkModal.querySelector('[data-link-bt]')
-assert(linkBt && linkBt.disabled && linkBt.textContent.includes('Web Bluetooth unavailable'), 'Bluetooth link gated when unsupported')
+assert(await waitFor(() => !!linkModal.querySelector('[data-link-copy]')), 'link modal shows a copyable link code')
 
 /* a second physical device pairing over the paste path */
 const peerB = await device.createDevicePrincipal('laptop')
@@ -455,7 +494,7 @@ assert(linkModal.querySelector('[data-link-body]').textContent.includes(myCode),
 assert(linkModal.querySelector('[data-link-body]').textContent.includes('Linked devices (1)'), 'linked list rendered in modal')
 
 /* Trusted devices section derives the per-peer code */
-click(document.querySelector('[data-nav-custom="devices"]'))
+click(document.querySelector('[data-nav="Devices"]'))
 await flush()
 const trustedId = document.querySelector('[data-device-link-id]')
 assert(!!trustedId && trustedId.textContent.length > 0, 'trusted device row rendered')
@@ -467,8 +506,10 @@ assert(
 )
 
 /* error paths: malformed payload + self-link rejected */
-click(document.querySelector('[data-nav-custom="link"]'))
-await flush()
+if (linkModal.classList.contains('hidden')) {
+  click(document.querySelector('#dev-link'))
+  await flush()
+}
 type(linkModal.querySelector('[data-link-payload]'), 'not json')
 click(linkModal.querySelector('[data-link-complete]'))
 assert(
@@ -507,7 +548,9 @@ assert(
   'initPasskey reads enrollment facts from the store',
 )
 
-click(document.querySelector('[data-desktop-sidebar] [data-nav-custom="auth"]'))
+click(document.querySelector('[data-nav="Settings"]'))
+await flush()
+click(document.querySelector('[data-settings-passkeys]'))
 await flush()
 const authModal = document.querySelector('[data-modal="auth"]')
 assert(!authModal.classList.contains('hidden'), 'Passkeys modal opens')
@@ -553,7 +596,7 @@ assert(gateEl.querySelector('[data-gate-action-label]').textContent === 'Create 
 /* 19. Lock S now locks the vault and stops future plaintext reaching disk */
 const { completedTasks } = await import('../src/store.js')
 const { taskList } = await import('../src/views/panels.js')
-click(document.querySelector('[data-desktop-sidebar] [data-nav-custom="settings"]'))
+click(document.querySelector('[data-nav="Settings"]'))
 click(document.querySelector('[data-settings-lock]'))
 assert(vault.isUnlocked() === false, 'Lock S now locks the at-rest vault')
 assert(taskList.get().length === 0, 'locking blanks the task list atoms (no plaintext lingers)')

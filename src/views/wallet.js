@@ -12,10 +12,10 @@ export const walletView = {
             ${icon(Wallet2, 'size-5 text-primary')}
             <div>
               <h2 class="text-lg font-semibold">Wallet</h2>
-              <p class="text-xs text-muted-foreground">No-dependency Bitcoin wallet · sealed by vault</p>
+              <p class="text-xs text-muted-foreground">Bitcoin wallet (minimal, no external deps)</p>
             </div>
           </div>
-          <button data-wallet-init class="flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">${icon(Plus, 'size-4')}New wallet</button>
+          <button data-wallet-init class="flex items-center gap-2 rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">${icon(Plus, 'size-4')}Create / Restore</button>
         </div>
 
         <div data-wallet-addr class="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm hidden">
@@ -37,13 +37,14 @@ export const walletView = {
         </div>
 
         <div data-wallet-create class="flex flex-col gap-3 rounded-2xl border border-border bg-card p-4 shadow-sm hidden">
-          <p class="text-sm font-medium">Generate a seed phrase</p>
-          <p class="text-xs text-muted-foreground">This phrase is never sent anywhere. Save it securely offline.</p>
+          <p class="text-sm font-medium">Recovery phrase (seed)</p>
+          <p class="text-xs text-muted-foreground">Write down these 12 words in order. They are the only way to recover your wallet.</p>
           <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
             ${Array.from({length:12}).map((_,i)=>`<div class="rounded-lg border border-border px-2 py-1.5 font-mono text-xs">#${i+1} <span data-mnemonic-${i}></span></div>`).join('')}
           </div>
+          <p class="text-xs text-amber-700 dark:text-amber-500">Keep it offline and private. We cannot recover it if lost.</p>
           <div class="flex flex-wrap gap-2">
-            <button data-mnemonic-ok class="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">I’ve saved it</button>
+            <button data-mnemonic-ok class="rounded-xl bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">I’ve secured it</button>
             <button data-mnemonic-new class="rounded-xl border border-border px-3 py-2 text-sm hover:bg-accent">Regenerate</button>
           </div>
         </div>
@@ -60,9 +61,8 @@ export const walletView = {
 
         <div class="rounded-2xl border border-border bg-card p-4 shadow-sm text-xs text-muted-foreground">
           <p class="font-medium text-foreground">Notes</p>
-          <p class="mt-1">- No external dependencies. Uses WebCrypto + simple bip39-like mnemonic (12 words) generated from random bytes.</p>
-          <p>- Addresses: P2WPKH (bech32-like minimal) using sha256+ripemd160 (universal) via noble? But no deps - implement small ripemd160? easier: use WebCrypto + a tiny ripemd160 if missing? Or fallback to simplified P2PKH? Better: add minimal ripemd160 in lib (no deps).</p>
-          <p>- All wallet secrets encrypted in vault (same passkey unlock) when saved.</p>
+          <p class="mt-1">Canonical BIP39 (2048-word English) mnemonic. Real P2WPKH addresses (bech32), BIP32/BIP84 derivation, secp256k1 ECDSA with RFC6979, zero external dependencies.</p>
+          <p class="mt-1">Vault encryption is used for persisted wallet state (same passkey unlock). Mnemonics are displayed only once on creation; keep them safe.</p>
         </div>
       </div>
     `

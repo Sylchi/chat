@@ -1,12 +1,13 @@
 import {
   CalendarDays,
-  ChevronDown,
+  Check,
   Clock3,
   Contact,
   Fingerprint,
   GalleryHorizontalEnd,
   KeyRound,
   ListTodo,
+  LockKeyhole,
   Menu,
   MessageCircle,
   MonitorSmartphone,
@@ -48,8 +49,16 @@ import {
 } from '../device-store.js'
 import { enrollPasskey, lockPasskey, passkey, unlockPasskey } from '../passkey-store.js'
 import { initContacts } from '../contacts-store.js'
+import { setTheme, themeChoice, THEMES } from '../theme.js'
 
-const PROFILE_NAME = 'Alex Rivera'
+function greeting() {
+  const hour = new Date().getHours()
+  if (hour < 12) return 'Good morning'
+  if (hour < 18) return 'Good afternoon'
+  return 'Good evening'
+}
+
+const THEME_LABELS = { system: 'System', light: 'Light', dark: 'Dark' }
 
 const navItems = [
   { label: 'Inbox', icon: MessageCircle, count: chats.get().reduce((total, chat) => total + (chat.unread || 0), 0) || 0 },
@@ -89,7 +98,7 @@ function renderAuth(authModal) {
       <div class="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-4">
         ${icon(Fingerprint, 'size-5 text-primary')}
         <div class="min-w-0 flex-1">
-          <p class="truncate text-sm font-medium">${esc(state.name || PROFILE_NAME)}</p>
+          <p class="truncate text-sm font-medium">${esc(state.name || 'S user')}</p>
           <p class="truncate font-mono text-[10px] text-muted-foreground">${esc(state.self?.id ?? '')}</p>
         </div>
         <span class="rounded-md bg-emerald-500/10 px-2 py-1 text-[10px] font-medium text-emerald-600">Unlocked</span>
@@ -158,14 +167,6 @@ export function initWorkspace(root) {
             <div class="grid size-8 place-items-center rounded-xl bg-brand text-brand-foreground">${brandMark('size-4')}</div>
             <span data-side-hide class="text-[17px] font-semibold tracking-tight">S</span>
           </div>
-          <button type="button" data-nav-custom="settings" data-side-row="profile" data-side-title="Alex Rivera · Personal space" class="mb-5 flex items-center gap-3 rounded-2xl border border-sidebar-border bg-card p-3 text-left shadow-sm hover:bg-accent">
-            ${avatar('AR', 'bg-cyan-200 text-cyan-900', true)}
-            <span data-side-hide class="min-w-0">
-              <span class="block truncate text-sm font-semibold">Alex Rivera</span>
-              <span class="block text-[11px] text-muted-foreground">Personal space</span>
-            </span>
-            ${icon(ChevronDown, 'ml-auto size-3.5 text-muted-foreground', 'data-side-hide')}
-          </button>
           <nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain" aria-label="Main navigation">
             ${navItems.map(navButton).join('')}
           </nav>
@@ -197,12 +198,30 @@ export function initWorkspace(root) {
           <header class="flex h-16 items-center justify-between border-b border-border px-4 sm:px-6">
             <div class="flex items-center gap-3">
               <button data-role="menu" aria-label="Open navigation" aria-controls="mobile-sidebar" aria-expanded="false" class="rounded-lg p-2 hover:bg-accent md:hidden">${icon(Menu, 'size-5')}</button>
-              <div><p id="header-overline" class="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">${esc(activeNav.get())}</p><h1 class="text-lg font-semibold tracking-tight">Good morning, Alex</h1></div>
+              <div><p id="header-overline" class="text-[11px] font-medium uppercase tracking-[0.16em] text-muted-foreground">${esc(activeNav.get())}</p><h1 id="header-greeting" class="text-lg font-semibold tracking-tight">${greeting()}</h1></div>
             </div>
             <div class="flex items-center gap-2">
               <button data-role="chats" aria-label="Open chats" aria-controls="chats-drawer" aria-expanded="false" class="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-accent lg:hidden">${icon(MessageCircle, 'size-3.5')}<span class="hidden sm:inline">Chats</span></button>
               <div class="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 py-2 pl-3 pr-2 text-xs text-muted-foreground focus-within:ring-2 focus-within:ring-ring/20 sm:flex">${icon(Search, 'size-3.5')}<input data-search aria-label="Search chats" placeholder="Search chats" autocomplete="off" class="w-32 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground" /><kbd class="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘K</kbd></div>
-              <button type="button" data-nav-custom="settings" aria-label="Open settings" class="rounded-full hover:ring-2 hover:ring-ring/20">${avatar('AR', 'bg-cyan-200 text-cyan-900', false, true)}</button>
+              <div class="relative" data-account>
+                <button type="button" data-role="account" aria-haspopup="menu" aria-expanded="false" aria-label="Account and settings" class="rounded-full transition hover:ring-2 hover:ring-ring/20">
+                  <span class="grid size-8 place-items-center rounded-full bg-brand text-brand-foreground">${brandMark('size-3.5')}</span>
+                </button>
+                <div data-account-menu role="menu" aria-label="Account" hidden class="absolute right-0 z-40 mt-2 w-60 overflow-hidden rounded-2xl border border-border bg-popover p-1.5 text-popover-foreground shadow-2xl">
+                  <div class="px-3 py-2">
+                    <p class="text-xs font-semibold">This device</p>
+                    <p data-account-device class="mt-0.5 truncate font-mono text-[10px] text-muted-foreground">…</p>
+                  </div>
+                  <div class="my-1 h-px bg-border"></div>
+                  <p class="px-3 pb-1 pt-1 text-[10px] font-medium uppercase tracking-[0.14em] text-muted-foreground">Appearance</p>
+                  ${THEMES.map(
+                    (mode) => `<button type="button" role="menuitemradio" data-theme-option="${mode}" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-accent"><span class="flex-1 text-left">${THEME_LABELS[mode]}</span><span data-theme-check="${mode}" class="text-primary">${icon(Check, 'size-3.5')}</span></button>`,
+                  ).join('')}
+                  <div class="my-1 h-px bg-border"></div>
+                  <button type="button" role="menuitem" data-account-action="settings" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-accent">${icon(Settings2, 'size-3.5')}Settings</button>
+                  <button type="button" role="menuitem" data-account-action="lock" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-accent">${icon(LockKeyhole, 'size-3.5')}Lock S now</button>
+                </div>
+              </div>
             </div>
           </header>
 
@@ -271,6 +290,27 @@ export function initWorkspace(root) {
   const chatsBtn = root.querySelector('[data-role="chats"]')
   const mobileCloseBtn = mobileNav.querySelector('[data-mobile-close]')
   const chatCloseBtn = chatDrawer.querySelector('[data-chat-close]')
+  const accountBtn = root.querySelector('[data-role="account"]')
+  const accountMenu = root.querySelector('[data-account-menu]')
+
+  function syncTheme() {
+    const current = themeChoice.get()
+    for (const btn of accountMenu.querySelectorAll('[data-theme-option]')) {
+      const active = btn.dataset.themeOption === current
+      btn.setAttribute('aria-checked', String(active))
+      btn.querySelector('[data-theme-check]')?.classList.toggle('invisible', !active)
+    }
+  }
+
+  function setAccountOpen(open) {
+    accountMenu.hidden = !open
+    accountBtn.setAttribute('aria-expanded', String(open))
+    if (open) {
+      const target = accountMenu.querySelector('[data-account-device]')
+      if (target) target.textContent = localDevice.get()?.id ?? 'Setting up…'
+      syncTheme()
+    }
+  }
 
   // Geometry and label hiding for the rail live in CSS, keyed off [data-collapsed].
   function applyCollapsed(collapsed) {
@@ -429,6 +469,22 @@ export function initWorkspace(root) {
   mobileCloseBtn.addEventListener('click', () => mobileSidebarOpen.set(false))
   menuBtn.addEventListener('click', () => mobileSidebarOpen.set(true))
 
+  accountBtn.addEventListener('click', () => setAccountOpen(accountMenu.hidden))
+  accountMenu.addEventListener('click', (event) => {
+    const themeBtn = event.target.closest('[data-theme-option]')
+    if (themeBtn) {
+      setTheme(themeBtn.dataset.themeOption)
+      return
+    }
+    const action = event.target.closest('[data-account-action]')?.dataset.accountAction
+    if (action === 'settings') activeNav.set('Settings')
+    else if (action === 'lock') lockPasskey()
+    setAccountOpen(false)
+  })
+  document.addEventListener('click', (event) => {
+    if (!accountMenu.hidden && !event.target.closest('[data-account]')) setAccountOpen(false)
+  })
+
   chatsBtn.addEventListener('click', () => {
     mobileSidebarOpen.set(false)
     chatsDrawerOpen.set(true)
@@ -469,9 +525,12 @@ export function initWorkspace(root) {
     const target = event.target
     if (target.closest('[data-auth-close]')) showAuth.set(false)
     else if (target.closest('[data-auth-lock]')) lockPasskey()
-    else if (target.closest('[data-auth-platform], [data-auth-key]')) {
-      if (passkey.get().enrolled) void unlockPasskey()
-      else void enrollPasskey(PROFILE_NAME)
+    else if (target.closest('[data-auth-platform]')) {
+      if (passkey.get().enrolled) void unlockPasskey('platform')
+      else void enrollPasskey('S user', 'platform')
+    } else if (target.closest('[data-auth-key]')) {
+      if (passkey.get().enrolled) void unlockPasskey('cross-platform')
+      else void enrollPasskey('S user', 'cross-platform')
     }
   })
 
@@ -595,6 +654,11 @@ export function initWorkspace(root) {
       return
     }
     if (event.key !== 'Escape') return
+    if (accountBtn.getAttribute('aria-expanded') === 'true') {
+      setAccountOpen(false)
+      accountBtn.focus()
+      return
+    }
     const searchInput = root.querySelector('[data-search]')
     if (searchInput && document.activeElement === searchInput && searchTerm.get()) {
       searchTerm.set('')
@@ -635,6 +699,8 @@ export function initWorkspace(root) {
   sidebarCollapsed.subscribe(applyCollapsed)
   mobileSidebarOpen.subscribe(applyMobile)
   chatsDrawerOpen.subscribe(applyChatDrawer)
+  themeChoice.subscribe(syncTheme)
+  syncTheme()
   agentModel.subscribe((state) => {
     const text = agentPreviewText(state)
     for (const node of root.querySelectorAll('[data-agent-preview]')) node.textContent = text
