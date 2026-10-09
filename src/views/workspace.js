@@ -4,6 +4,7 @@ import {
   Clock3,
   Contact,
   Fingerprint,
+  FolderOpen,
   GalleryHorizontalEnd,
   KeyRound,
   ListTodo,
@@ -26,6 +27,7 @@ import { agentModel, agentPreviewText } from '../agent/model.js'
 import { chatView } from './chat.js'
 import { calendarView, contactsView, galleryView, openTaskCount, settingsView, taskList, tasksView, timelineView } from './panels.js'
 import { devicesView } from './devices.js'
+import { filesView } from './files.js'
 import {
   activeChat,
   activeNav,
@@ -67,6 +69,7 @@ const navItems = [
   { label: 'Calendar', icon: CalendarDays },
   { label: 'Tasks', icon: ListTodo, count: 0 },
   { label: 'Gallery', icon: GalleryHorizontalEnd },
+  { label: 'Files', icon: FolderOpen },
   { label: 'Timeline', icon: Clock3 },
   { label: 'Devices', icon: MonitorSmartphone },
   { label: 'Settings', icon: Settings2 },
@@ -82,6 +85,7 @@ const REGIONS = {
   Calendar: calendarView,
   Tasks: tasksView,
   Gallery: galleryView,
+  Files: filesView,
   Timeline: timelineView,
   Settings: settingsView,
 }
