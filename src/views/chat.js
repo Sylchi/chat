@@ -7,15 +7,12 @@ import {
   GalleryHorizontalEnd,
   ListTodo,
   Mic,
-  MoreHorizontal,
   Paperclip,
-  Phone,
   Send,
   Settings2,
   ShieldCheck,
   Smile,
   Sparkles,
-  Video,
   X,
   Zap,
 } from '../vendor/icons.js'
@@ -144,13 +141,8 @@ function headerHtml() {
       ${avatar(meta.initials, meta.color, meta.online)}
       <div>
         <h2 id="chat-title" class="text-sm font-semibold">${esc(name)}</h2>
-        <p class="text-[11px] text-muted-foreground">${meta.online ? 'online · messages are encrypted' : 'last seen yesterday · messages are encrypted'}</p>
+        <p class="text-[11px] text-muted-foreground">${meta.online ? 'online' : 'end-to-end encrypted'}</p>
       </div>
-    </div>
-    <div class="flex items-center gap-1">
-      <button class="rounded-lg p-2 text-muted-foreground hover:bg-accent">${icon(Phone)}</button>
-      <button class="rounded-lg p-2 text-muted-foreground hover:bg-accent">${icon(Video)}</button>
-      <button class="rounded-lg p-2 text-muted-foreground hover:bg-accent">${icon(MoreHorizontal)}</button>
     </div>`
 }
 

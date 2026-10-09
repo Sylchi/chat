@@ -20,6 +20,10 @@ function mountWorkspace() {
   workspaceRoot.id = 'workspace-root'
   app.appendChild(workspaceRoot)
   initWorkspace(workspaceRoot)
+  requestAnimationFrame(() => {
+    const firstNav = workspaceRoot?.querySelector('[data-nav]')
+    if (firstNav instanceof HTMLElement) firstNav.focus()
+  })
 }
 
 passkey.subscribe((state) => {

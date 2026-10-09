@@ -1,5 +1,4 @@
 import {
-  Bell,
   CalendarDays,
   ChevronDown,
   Clock3,
@@ -21,19 +20,22 @@ import {
   X,
 } from '../vendor/icons.js'
 import { avatar, brandMark, esc, icon } from '../dom.js'
+import { atom } from '../vendor/store.js'
 import { AGENT_CHAT, chats } from '../chats.js'
 import { agentModel, agentPreviewText } from '../agent/model.js'
 import { chatView } from './chat.js'
-import { TASKS, calendarView, contactsView, galleryView, tasksView, timelineView } from './panels.js'
+import { calendarView, contactsView, galleryView, openTaskCount, settingsView, taskList, tasksView, timelineView } from './panels.js'
 import { devicesView } from './devices.js'
 import {
   activeChat,
   activeNav,
   chatsDrawerOpen,
+  completedTasks,
   mobileSidebarOpen,
   sidebarCollapsed,
   showAuth,
   showLink,
+  threadFor,
 } from '../store.js'
 import {
   bluetoothAvailable,
@@ -58,7 +60,7 @@ const navItems = [
   { label: 'Contacts', icon: Contact },
   { label: 'Devices', icon: MonitorSmartphone },
   { label: 'Calendar', icon: CalendarDays },
-  { label: 'Tasks', icon: ListTodo, count: TASKS.length },
+  { label: 'Tasks', icon: ListTodo, count: 0 },
   { label: 'Gallery', icon: GalleryHorizontalEnd },
   { label: 'Timeline', icon: Clock3 },
 ]
@@ -71,6 +73,7 @@ const REGIONS = {
   Tasks: tasksView,
   Gallery: galleryView,
   Timeline: timelineView,
+  Settings: settingsView,
 }
 
 function connectDevice() {
@@ -118,6 +121,8 @@ function renderAuth(authModal) {
   </div>`
 }
 
+const searchTerm = atom('')
+
 function navButton(item) {
   const active = item.label === activeNav.get()
   return `<button data-nav="${esc(item.label)}" data-side-row="btn" data-side-title="${esc(item.label)}"${
@@ -127,7 +132,7 @@ function navButton(item) {
   }">
     ${icon(item.icon)}
     <span data-side-hide>${esc(item.label)}</span>
-    ${item.count ? `<span data-nav-count class="ml-auto rounded-full px-1.5 text-[10px] ${active ? 'bg-primary-foreground/15 text-primary-foreground' : 'bg-background text-muted-foreground'}">${item.count}</span>` : ''}
+    ${'count' in item ? `<span data-nav-count class="ml-auto rounded-full px-1.5 text-[10px] ${active ? 'bg-primary-foreground/15 text-primary-foreground' : 'bg-background text-muted-foreground'}">${item.count}</span>` : ''}
   </button>`
 }
 
@@ -136,7 +141,7 @@ const bottomItems = [
   { label: 'Devices', custom: 'devices', icon: MonitorSmartphone },
   { label: 'Passkeys', custom: 'auth', icon: Fingerprint },
   { label: 'Link a device', custom: 'link', icon: Link2 },
-  { label: 'Settings', custom: '', icon: Settings2 },
+  { label: 'Settings', custom: 'settings', icon: Settings2 },
 ]
 
 function bottomButton(item) {
@@ -216,18 +221,17 @@ export function initWorkspace(root) {
             </div>
             <div class="flex items-center gap-2">
               <button data-role="chats" aria-label="Open chats" aria-controls="chats-drawer" aria-expanded="false" class="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-accent lg:hidden">${icon(MessageCircle, 'size-3.5')}<span class="hidden sm:inline">Chats</span></button>
-              <button aria-label="Search" class="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:flex">${icon(Search, 'size-3.5')}Search <kbd class="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘ K</kbd></button>
-              <button aria-label="Notifications" class="relative rounded-xl p-2.5 text-muted-foreground hover:bg-accent">${icon(Bell)}<span class="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500"></span></button>
+              <div class="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 py-2 pl-3 pr-2 text-xs text-muted-foreground focus-within:ring-2 focus-within:ring-ring/20 sm:flex">${icon(Search, 'size-3.5')}<input data-search aria-label="Search chats" placeholder="Search chats" autocomplete="off" class="w-32 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground" /><kbd class="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘K</kbd></div>
               ${avatar('AR', 'bg-cyan-200 text-cyan-900', false, true)}
             </div>
           </header>
 
           <div class="flex min-h-0 flex-1">
             <div data-chat-list class="hidden w-[268px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex lg:min-h-0">
-              <div class="flex items-center justify-between px-4 py-4"><p class="text-sm font-semibold">Recent chats</p><button aria-label="New chat" class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(Plus)}</button></div>
+              <div class="flex items-center justify-between px-4 py-4"><p class="text-sm font-semibold">Recent chats</p><button data-new-chat aria-label="New chat" class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(Plus)}</button></div>
               <div class="flex-1 overflow-y-auto px-2"><div data-chat-rows class="flex flex-col gap-1"></div></div>
               <div class="mx-4 mt-8 shrink-0 rounded-2xl border border-border bg-muted/40 p-3">
-                <div class="mb-2 flex items-center gap-2 text-xs font-medium">${icon(Wifi, 'size-3.5 text-emerald-600')}&#160;<span data-device-count>2 devices synced</span></div>
+                <div class="mb-2 flex items-center gap-2 text-xs font-medium">${icon(Wifi, 'size-3.5 text-emerald-600')}&#160;<span data-device-count>Sync status</span></div>
                 <p class="text-[11px] leading-relaxed text-muted-foreground">Your messages, files and calls stay yours. No passwords. No third-party account.</p>
                 <button data-nav-custom="devices" class="mt-3 text-[11px] font-medium text-foreground underline underline-offset-4">Manage devices</button>
               </div>
@@ -247,7 +251,7 @@ export function initWorkspace(root) {
         </div>
         <div class="flex-1 overflow-y-auto"><div data-chat-rows class="flex flex-col gap-1"></div></div>
         <button data-nav-custom="devices" class="mt-4 rounded-xl border border-border bg-muted/40 p-3 text-left text-[11px] text-muted-foreground hover:bg-accent">
-          <span class="flex items-center gap-2 text-xs font-medium text-foreground">${icon(Wifi, 'size-3.5 text-emerald-600')}<span data-device-count>2 devices synced</span></span>
+          <span class="flex items-center gap-2 text-xs font-medium text-foreground">${icon(Wifi, 'size-3.5 text-emerald-600')}<span data-device-count>Sync status</span></span>
           <span class="mt-1 block">Your messages, files and calls stay yours.</span>
         </button>
       </aside>
@@ -338,8 +342,17 @@ export function initWorkspace(root) {
   }
 
   function renderChatRows() {
-    const html = chats.get().map(chatButton).join('')
-    for (const rows of root.querySelectorAll('[data-chat-rows]')) rows.innerHTML = html
+    const q = searchTerm.get().trim().toLowerCase()
+    const rows = q
+      ? chats.get().filter((chat) => {
+          if ((chat.name || '').toLowerCase().includes(q)) return true
+          return threadFor(chat.name).some((m) => String(m.text ?? '').toLowerCase().includes(q))
+        })
+      : chats.get()
+    const html = rows.map(chatButton).join('')
+    for (const node of root.querySelectorAll('[data-chat-rows]')) {
+      node.innerHTML = html || '<p class="px-3 py-2 text-xs text-muted-foreground">No matches</p>'
+    }
   }
 
   function syncInboxBadge() {
@@ -352,8 +365,16 @@ export function initWorkspace(root) {
 
   function syncDeviceCount() {
     const total = 1 + linked.get().length
-    const text = `${total} device${total === 1 ? '' : 's'} synced`
+    const text = total === 1 ? 'This device' : `${total} linked devices`
     for (const node of root.querySelectorAll('[data-device-count]')) node.textContent = text
+  }
+
+  function syncTaskBadge() {
+    const count = openTaskCount()
+    for (const badge of root.querySelectorAll('[data-nav="Tasks"] [data-nav-count]')) {
+      badge.textContent = String(count)
+      badge.classList.toggle('hidden', count === 0)
+    }
   }
 
   // Off-canvas drawers stay inert while closed so their controls are never
@@ -421,6 +442,7 @@ export function initWorkspace(root) {
     if (button.dataset.navCustom === 'agent') openAgentChat()
     else if (button.dataset.navCustom === 'devices') activeNav.set('Devices')
     else if (button.dataset.navCustom === 'auth') showAuth.set(true)
+    else if (button.dataset.navCustom === 'settings') activeNav.set('Settings')
     else if (button.dataset.navCustom === 'link') connectDevice()
   })
 
@@ -433,6 +455,7 @@ export function initWorkspace(root) {
     else if (custom === 'agent') openAgentChat()
     else if (custom === 'devices') activeNav.set('Devices')
     else if (custom === 'auth') showAuth.set(true)
+    else if (custom === 'settings') activeNav.set('Settings')
     else if (custom === 'link') connectDevice()
   })
 
@@ -471,6 +494,8 @@ export function initWorkspace(root) {
     }
     const devicesBtn = target.closest('[data-nav-custom="devices"]')
     if (devicesBtn) activeNav.set('Devices')
+    const newChatBtn = target.closest('[data-new-chat]')
+    if (newChatBtn) activeNav.set('Contacts')
   })
 
   authModal.addEventListener('click', (event) => {
@@ -574,11 +599,51 @@ export function initWorkspace(root) {
       }
       return
     }
+    if (key === 'k' && (event.metaKey || event.ctrlKey)) {
+      const searchInput = root.querySelector('[data-search]')
+      if (searchInput) {
+        event.preventDefault()
+        searchInput.focus()
+        searchInput.select()
+      }
+      return
+    }
     if (event.key !== 'Escape') return
+    const searchInput = root.querySelector('[data-search]')
+    if (searchInput && document.activeElement === searchInput && searchTerm.get()) {
+      searchTerm.set('')
+      searchInput.value = ''
+      renderChatRows()
+      event.preventDefault()
+      return
+    }
+    if (searchInput && document.activeElement === searchInput) {
+      searchInput.blur()
+      return
+    }
     if (chatsDrawerOpen.get()) chatsDrawerOpen.set(false)
     else if (mobileSidebarOpen.get()) mobileSidebarOpen.set(false)
     else if (showLink.get()) showLink.set(false)
     else if (showAuth.get()) showAuth.set(false)
+  })
+
+  const searchInputEl = root.querySelector('[data-search]')
+  searchInputEl?.addEventListener('input', () => {
+    searchTerm.set(searchInputEl.value)
+    renderChatRows()
+  })
+  searchInputEl?.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return
+    event.preventDefault()
+    const q = searchTerm.get().trim().toLowerCase()
+    const match = chats.get().find((chat) => {
+      if ((chat.name || '').toLowerCase().includes(q)) return true
+      return threadFor(chat.name).some((m) => String(m.text ?? '').toLowerCase().includes(q))
+    })
+    if (match) {
+      activeChat.set(match.name)
+      activeNav.set('Inbox')
+    }
   })
 
   sidebarCollapsed.subscribe(applyCollapsed)
@@ -604,6 +669,9 @@ export function initWorkspace(root) {
     syncChatList()
     syncInboxBadge()
   })
+  taskList.subscribe(syncTaskBadge)
+  completedTasks.subscribe(syncTaskBadge)
+  syncTaskBadge()
   void initContacts().catch((error) => console.error('[S] contacts failed to initialize', error))
   activeChat.subscribe(syncChatList)
   // subscribe() fires immediately, so this is also the initial render.

@@ -1,26 +1,27 @@
 import { CalendarDays, Clock3, GalleryHorizontalEnd, ListTodo, Plus, X } from '../vendor/icons.js'
 import { avatar, esc, icon } from '../dom.js'
 import { chatMeta } from '../chats.js'
-import { activeChat, activeNav, completedTasks } from '../store.js'
+import { activeChat, activeNav, completedTasks, persistentAtom, threads } from '../store.js'
 import { addContact, contacts } from '../contacts-store.js'
+import { localDevice } from '../device-store.js'
+import { lockPasskey } from '../passkey-store.js'
+import { hasCachedModel } from '../agent/model.js'
 
-const DEMO_STATUS = {
-  'Maya Chen': 'Online now',
-  'Jordan Blake': 'Last seen yesterday',
-  'Priya Shah': 'Online now',
-  'Design crew': '4 members',
-}
-
-export const TASKS = [
+const DEFAULT_TASKS = [
   'Send final deck to design crew',
   'Choose favorites from Saturday gallery',
   'Book train for weekend trip',
   'Review privacy settings',
 ]
 
-function openTaskCount() {
+// Sample items seed a fresh install; the list is user-editable and persisted.
+export const TASKS = DEFAULT_TASKS
+export const taskList = persistentAtom('s:task-list', [...DEFAULT_TASKS], [])
+export const calendarEvents = persistentAtom('s:calendar', [], [])
+
+export function openTaskCount() {
   const done = completedTasks.get()
-  return TASKS.filter((task) => !done.includes(task)).length
+  return taskList.get().filter((task) => !done.includes(task)).length
 }
 
 function renderContacts() {
@@ -31,14 +32,13 @@ function renderContacts() {
   return list
     .map((contact) => {
       const { initials, color } = chatMeta(contact.name)
-      const status = DEMO_STATUS[contact.name] ?? 'Private contact'
       return `
         <article data-contact="${esc(contact.name)}" class="rounded-2xl border border-border bg-card p-4">
           <div class="flex items-start gap-3">
-            ${avatar(initials, color, status === 'Online now')}
+            ${avatar(initials, color, false)}
             <div class="min-w-0 flex-1">
               <h3 class="font-semibold">${esc(contact.name)}</h3>
-              <p class="text-xs text-muted-foreground">${esc(status)}</p>
+              <p class="text-xs text-muted-foreground">Private contact · end-to-end encrypted</p>
               <p class="mt-3 truncate rounded-lg bg-muted/60 px-2.5 py-2 font-mono text-[11px] text-muted-foreground" title="${esc(contact.id)}">${esc(contact.id)}</p>
             </div>
             <button data-message-contact="${esc(contact.name)}" class="rounded-lg border border-border px-2.5 py-1.5 text-xs font-medium hover:bg-accent">Message</button>
@@ -182,31 +182,72 @@ export const calendarView = {
     <div class="flex-1 overflow-auto p-5 sm:p-8">
       <div class="mb-6 flex items-center justify-between">
         <div>
-          <p class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">October 2026</p>
+          <p class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Private calendar</p>
           <h2 class="mt-1 text-2xl font-semibold">Calendar</h2>
         </div>
-        <button class="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">New event</button>
+        <button data-cal-new class="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">${icon(Plus, 'size-4')}New event</button>
       </div>
-      <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-        ${[
-          'Today · 11:00 — Team sync',
-          'Tomorrow · 14:30 — Call with Maya',
-          'Friday · 18:00 — Gallery review',
-          'Mon, Oct 12 · 09:00 — Plan the week',
-          'Tue, Oct 13 · 16:00 — Design crew',
-          'Sat, Oct 17 · All day — Weekend trip',
-        ]
-          .map(
-            (event) => `
-              <div class="rounded-2xl border border-border bg-card p-4">
-                ${icon(CalendarDays, 'mb-4 size-4 text-primary')}
-                <p class="text-sm font-medium">${esc(event)}</p>
-                <p class="mt-1 text-xs text-muted-foreground">Private event · synced across 2 devices</p>
-              </div>`,
-          )
-          .join('')}
+      <div data-cal-form class="mb-4 hidden rounded-2xl border border-border bg-card p-4">
+        <div class="flex flex-col gap-2 sm:flex-row">
+          <input data-cal-title aria-label="Event title" placeholder="Event title" class="flex-1 rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/20" />
+          <input data-cal-when type="datetime-local" aria-label="When" class="rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring/20" />
+          <button data-cal-save class="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Add</button>
+        </div>
       </div>
+      <div id="calendar-list" class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">${renderCalendar()}</div>
     </div>`,
+  init: (root) => {
+    const list = root.querySelector('#calendar-list')
+    const form = root.querySelector('[data-cal-form]')
+    const titleInput = root.querySelector('[data-cal-title]')
+    const whenInput = root.querySelector('[data-cal-when]')
+    const render = () => {
+      list.innerHTML = renderCalendar()
+    }
+    render()
+    disposeCal = calendarEvents.subscribe(render)
+    root.querySelector('[data-cal-new]').addEventListener('click', () => {
+      const opening = form.classList.toggle('hidden') === false
+      if (opening) titleInput.focus()
+    })
+    root.querySelector('[data-cal-save]').addEventListener('click', () => {
+      const title = titleInput.value.trim()
+      if (!title) return
+      const when = whenInput.value || new Date().toISOString()
+      calendarEvents.set([...calendarEvents.get(), { id: `ev-${Date.now()}`, title, when }])
+      titleInput.value = ''
+      whenInput.value = ''
+      form.classList.add('hidden')
+    })
+  },
+  destroy: () => {
+    disposeCal?.()
+    disposeCal = null
+  },
+}
+
+function renderCalendar() {
+  const list = calendarEvents.get()
+  if (!list.length) {
+    return '<div class="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">No events yet — add one to plan something.</div>'
+  }
+  const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+  return list
+    .map((event) => {
+      const when = new Date(event.when)
+      const date = Number.isNaN(when.getTime())
+        ? esc(event.when)
+        : esc(
+            `${days[when.getDay()]} ${when.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} · ${when.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })}`,
+          )
+      return `
+        <div class="rounded-2xl border border-border bg-card p-4">
+          ${icon(CalendarDays, 'mb-4 size-4 text-primary')}
+          <p class="text-sm font-medium">${esc(event.title)}</p>
+          <p class="mt-1 text-xs text-muted-foreground">${date}</p>
+        </div>`
+    })
+    .join('')
 }
 
 export const tasksView = {
@@ -217,40 +258,127 @@ export const tasksView = {
           <p data-tasks-open class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">${openTaskCount()} open items</p>
           <h2 class="mt-1 text-2xl font-semibold">Tasks</h2>
         </div>
-        <button class="rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground">Add task</button>
+        <button data-task-new class="flex items-center gap-1.5 rounded-xl bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">${icon(Plus, 'size-4')}Add task</button>
       </div>
+      <form data-task-form class="mb-4 hidden items-center gap-2 rounded-2xl border border-border bg-card p-4">
+        <input data-task-input aria-label="New task" placeholder="What needs doing?" class="flex-1 rounded-xl border border-border bg-muted/40 px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring/20" />
+        <button data-task-save class="rounded-xl bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">Add</button>
+      </form>
       <div id="tasks-list" class="flex flex-col gap-3">${renderTasks()}</div>
     </div>`,
   init: (root) => {
-    completedTasks.subscribe(() => {
-      const list = root.querySelector('#tasks-list')
-      if (list) list.innerHTML = renderTasks()
+    const list = root.querySelector('#tasks-list')
+    const form = root.querySelector('[data-task-form]')
+    const input = root.querySelector('[data-task-input]')
+    const offs = []
+    const render = () => {
+      list.innerHTML = renderTasks()
       const open = root.querySelector('[data-tasks-open]')
       if (open) {
         const count = openTaskCount()
         open.textContent = `${count} open item${count === 1 ? '' : 's'}`
       }
-    })
-    root.querySelector('#tasks-list')?.addEventListener('change', (event) => {
-      const input = event.target.closest('input[data-task]')
-      if (!input) return
-      const task = input.dataset.task ?? ''
+    }
+    offs.push(taskList.subscribe(render), completedTasks.subscribe(render))
+    list.addEventListener('change', (event) => {
+      const checkbox = event.target.closest('input[data-task]')
+      if (!checkbox) return
+      const task = checkbox.dataset.task ?? ''
       const current = completedTasks.get()
       completedTasks.set(current.includes(task) ? current.filter((item) => item !== task) : [...current, task])
     })
+    root.querySelector('[data-task-new]').addEventListener('click', () => {
+      const opening = form.classList.toggle('hidden') === false
+      if (opening) input.focus()
+    })
+    form.addEventListener('submit', (event) => {
+      event.preventDefault()
+      const title = input.value.trim()
+      if (!title) return
+      taskList.set([...taskList.get(), title])
+      input.value = ''
+      form.classList.add('hidden')
+    })
+    disposeTasks = () => { for (const off of offs) off() }
+  },
+  destroy: () => {
+    disposeTasks?.()
+    disposeTasks = null
   },
 }
 
 function renderTasks() {
   const done = completedTasks.get()
-  return TASKS.map(
-    (task, index) => `
+  return taskList
+    .get()
+    .map(
+      (task, index) => `
       <label class="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
         <input type="checkbox" data-task="${esc(task)}" ${done.includes(task) ? 'checked' : ''} class="size-4 accent-primary" />
         <span class="flex-1 text-sm font-medium">${esc(task)}</span>
         <span class="text-xs text-muted-foreground">${index < 2 ? 'Today' : 'This week'}</span>
       </label>`,
-  ).join('')
+    )
+    .join('')
+}
+
+let disposeCal = null
+let disposeTasks = null
+let disposeSettings = null
+
+export const settingsView = {
+  html: () => `
+    <div class="flex-1 overflow-auto p-5 sm:p-8">
+      <div class="mb-7">
+        <p class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Security & identity</p>
+        <h2 class="mt-1 text-2xl font-semibold tracking-tight">Settings</h2>
+        <p class="mt-1 text-sm text-muted-foreground">This device, your key, and how S stores it.</p>
+      </div>
+      <div class="flex max-w-xl flex-col gap-3">
+        <section class="rounded-2xl border border-border bg-card p-4">
+          <h3 class="text-sm font-semibold">This device</h3>
+          <div data-settings-device class="mt-2 flex flex-col gap-1.5 text-xs text-muted-foreground"></div>
+        </section>
+        <section class="rounded-2xl border border-border bg-card p-4">
+          <h3 class="text-sm font-semibold">At-rest encryption</h3>
+          <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">Everything stored on this device is sealed with a key derived from your passkey. While S is locked, nothing stored here is readable — not even the media you send.</p>
+          <button data-settings-lock class="mt-3 w-full rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">Lock S now</button>
+        </section>
+        <section class="rounded-2xl border border-border bg-card p-4">
+          <h3 class="text-sm font-semibold">About</h3>
+          <div class="mt-1.5 flex flex-col gap-1.5 text-xs leading-relaxed text-muted-foreground">
+            <p>S · a private space for everything</p>
+            <p data-settings-stats></p>
+          </div>
+        </section>
+      </div>
+    </div>`,
+  init: (root) => {
+    const deviceBox = root.querySelector('[data-settings-device]')
+    const stats = root.querySelector('[data-settings-stats]')
+    const offs = []
+    const renderDevice = () => {
+      const dev = localDevice.get()
+      deviceBox.innerHTML = dev
+        ? `<div class="flex items-center justify-between gap-3"><span>Name</span><span class="font-medium text-foreground">${esc(dev.name)}</span></div>
+           <div class="flex items-center justify-between gap-3"><span>Device ID</span><span class="font-mono text-[10px]">${esc(dev.id)}</span></div>
+           <div class="flex items-center justify-between gap-3"><span>Fingerprint</span><span class="font-mono">${esc(dev.fingerprint)}</span></div>`
+        : '<p>Initializing device…</p>'
+    }
+    const renderStats = () => {
+      const count = Object.keys(threads.get()).length
+      stats.textContent = `${contacts.get().length} contacts · ${count} chat${count === 1 ? '' : 's'} · local agent model ${hasCachedModel() ? 'cached' : 'not loaded'}`
+    }
+    renderDevice()
+    renderStats()
+    offs.push(localDevice.subscribe(renderDevice), threads.subscribe(renderStats), contacts.subscribe(renderStats))
+    root.querySelector('[data-settings-lock]').addEventListener('click', () => lockPasskey())
+    disposeSettings = () => { for (const off of offs) off() }
+  },
+  destroy: () => {
+    disposeSettings?.()
+    disposeSettings = null
+  },
 }
 
 export const galleryView = {

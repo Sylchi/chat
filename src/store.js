@@ -32,14 +32,9 @@ export const activeNav = persistentAtom('s:active-nav', 'Inbox')
 export const activeChat = persistentAtom('s:active-chat', 'Maya Chen')
 export const draft = persistentAtom('s:draft', '')
 
-const SEED_THREADS = {
-  'Maya Chen': [
-    { from: 'them', text: 'Hey! I just finished editing the gallery from Saturday.', time: '10:36' },
-    { from: 'me', text: 'Oh nice, I can’t wait to see it. The light was perfect that day.', time: '10:37' },
-    { from: 'them', text: 'The new photos are beautiful', time: '10:42' },
-  ],
-}
-export const threads = persistentAtom('s:threads', SEED_THREADS, {})
+// Threads start empty; each contact chat is created on first send/import. The
+// S agent thread is likewise empty until the first prompt.
+export const threads = persistentAtom('s:threads', {}, {})
 
 export function threadFor(chat) {
   return threads.get()[chat] ?? []

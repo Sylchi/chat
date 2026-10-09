@@ -216,7 +216,10 @@ assert(picker.classList.contains('hidden'), 'escape closes emoji picker')
 /* 8. switching chats keeps threads separate */
 click(document.querySelector('[data-chat="Maya Chen"]'))
 assert(document.getElementById('chat-title')?.textContent === 'Maya Chen', 'header switches to Maya Chen')
-assert(document.getElementById('thread-messages').textContent.includes('The new photos are beautiful'), 'Maya thread renders')
+assert(
+  document.getElementById('thread-messages').textContent.includes('No messages yet'),
+  'threads start empty and honest — no fabricated seed messages',
+)
 assert(!document.querySelector('[data-suggest]'), 'no agent suggestions in human chat')
 assert(composer.placeholder === 'Write a message…', 'placeholder reverts for human chat')
 
@@ -285,6 +288,61 @@ click(document.querySelector('[data-role="chats"]'))
 assert(chatDrawer.classList.contains('translate-x-0'), 'drawer opens again')
 key(document, 'Escape')
 assert(chatDrawer.classList.contains('translate-x-full'), 'escape closes chat drawer')
+
+/* 13b. M1 honest-data panels: honest device copy, calendar, tasks, settings */
+const syncSpan = document.querySelector('[data-device-count]')
+assert(!!syncSpan && syncSpan.textContent === 'This device', 'device copy is honest (no fake “synced” claims)')
+
+click(document.querySelector('[data-desktop-sidebar] [data-nav-custom="settings"]'))
+assert(document.body.textContent.includes('At-rest encryption'), 'Settings view renders')
+assert(
+  document.querySelector('[data-settings-device]').textContent.includes('Initializing device…') ||
+    document.querySelector('[data-settings-device]').textContent.includes('Device ID'),
+  'Settings shows device facts',
+)
+assert(!!document.querySelector('[data-settings-lock]'), 'Settings offers Lock S now')
+
+click(document.querySelector('[data-nav="Calendar"]'))
+click(document.querySelector('[data-cal-new]'))
+const calForm = document.querySelector('[data-cal-form]')
+assert(!calForm.classList.contains('hidden'), 'calendar new-event form opens')
+type(calForm.querySelector('[data-cal-title]'), 'Call with Maya')
+type(calForm.querySelector('[data-cal-when]'), '2026-10-09T14:30')
+click(calForm.querySelector('[data-cal-save]'))
+assert(calForm.classList.contains('hidden'), 'calendar form closes after save')
+assert(
+  [...document.querySelectorAll('#calendar-list p')].some((p) => p.textContent.includes('Call with Maya')),
+  'new calendar event renders',
+)
+
+click(document.querySelector('[data-nav="Tasks"]'))
+click(document.querySelector('[data-task-new]'))
+const taskForm = document.querySelector('[data-task-form]')
+assert(!taskForm.classList.contains('hidden'), 'tasks add form opens')
+type(taskForm.querySelector('[data-task-input]'), 'Ship the honest-data pass')
+taskForm.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }))
+assert(
+  [...document.querySelectorAll('#tasks-list span')].some((s) => s.textContent.includes('Ship the honest-data pass')),
+  'new task renders in the list',
+)
+assert(document.querySelector('[data-tasks-open]').textContent.includes('5 open items'), 'open task count reflects additions')
+
+const searchEl = document.querySelector('[data-search]')
+type(searchEl, 'zzz-nomatch')
+assert(
+  [...document.querySelectorAll('[data-chat-rows]')].some((rows) => rows.textContent.includes('No matches')),
+  'search filters chats and shows an empty state',
+)
+type(searchEl, 'Maya')
+assert(
+  [...document.querySelectorAll('[data-chat-rows]')].some((rows) => rows.textContent.includes('Maya Chen')),
+  'search matches a contact by name',
+)
+type(searchEl, '')
+assert(
+  [...document.querySelectorAll('[data-chat-rows]')].every((rows) => !rows.textContent.includes('No matches')),
+  'clearing the search restores all chats',
+)
 
 /* 14. persistence is sealed at rest: readable in memory, ciphertext on disk */
 const sealed = (key) => {
@@ -491,6 +549,19 @@ assert(gateEl.querySelector('[data-gate-key]').classList.contains('hidden'), 'se
 
 passkeyStore.passkey.set({ ...passkeyStore.passkey.get(), status: 'unknown', enrolled: false })
 assert(gateEl.querySelector('[data-gate-action-label]').textContent === 'Create a passkey', 'gate shows onboarding when unenrolled')
+
+/* 19. Lock S now locks the vault and stops future plaintext reaching disk */
+const { completedTasks } = await import('../src/store.js')
+const { taskList } = await import('../src/views/panels.js')
+click(document.querySelector('[data-desktop-sidebar] [data-nav-custom="settings"]'))
+click(document.querySelector('[data-settings-lock]'))
+assert(vault.isUnlocked() === false, 'Lock S now locks the at-rest vault')
+assert(taskList.get().length === 0, 'locking blanks the task list atoms (no plaintext lingers)')
+assert(completedTasks.get().length === 0, 'locking blanks the completed list atom')
+store.draft.set('locked secrets')
+await vault.settled()
+const draftRaw = localStorage.getItem('s:draft')
+assert(!!draftRaw && !draftRaw.includes('locked secrets'), 'no post-lock plaintext reaches disk')
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed')
 process.exit(failures ? 1 : 0)

@@ -22,12 +22,6 @@ const PALETTE = [
   'bg-lime-200 text-lime-900',
 ]
 
-const PREVIEW = {
-  'Maya Chen': { text: 'The new photos are beautiful', time: '10:42', unread: 2, online: true },
-  'Design crew': { text: 'You: Sent the final deck', time: '09:18', unread: 0, online: false },
-  'Jordan Blake': { text: 'Video call · 23 min', time: 'Yesterday', unread: 0, online: false },
-}
-
 const AGENT_META = { initials: 'S', color: 'bg-violet-200 text-violet-900' }
 const SAVED_META = { initials: 'SM', color: 'bg-muted text-muted-foreground' }
 
@@ -50,7 +44,7 @@ export function chatMeta(name) {
   if (name === AGENT_CHAT) return { name, ...AGENT_META, online: true }
   if (name === SAVED_CHAT) return { name, ...SAVED_META, online: false }
   const known = KNOWN[name]
-  if (known) return { name, ...known, online: PREVIEW[name]?.online ?? false }
+  if (known) return { name, ...known, online: false }
   return { name, initials: initialsOf(name), color: PALETTE[hashOf(name) % PALETTE.length], online: false }
 }
 
@@ -71,14 +65,13 @@ function savedRow() {
 }
 
 function contactRow(contact) {
-  const preview = PREVIEW[contact.name] ?? {}
   return {
     name: contact.name,
     ...chatMeta(contact.name),
-    text: preview.text ?? 'Tap to open an encrypted chat',
-    time: preview.time ?? '',
-    unread: preview.unread ?? 0,
-    online: preview.online ?? false,
+    text: 'Private chat · end-to-end encrypted',
+    time: '',
+    unread: 0,
+    online: false,
   }
 }
 
