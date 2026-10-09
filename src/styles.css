@@ -187,11 +187,26 @@
     background: color-mix(in oklch, var(--muted-foreground) 65%, transparent);
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
     font-family: var(--font-sans);
+    text-rendering: optimizeLegibility;
     height: 100dvh;
     overflow: hidden;
     overscroll-behavior: none;
+  }
+}
+
+/* Inline help popovers fade in. Only opacity is animated so the anchored
+   translate utilities that position the bubble are never clobbered. */
+[data-help-panel] {
+  animation: s-pop 140ms ease-out;
+}
+@keyframes s-pop {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
 

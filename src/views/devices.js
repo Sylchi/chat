@@ -1,7 +1,8 @@
-import { CheckCircle2, MonitorSmartphone, RefreshCw, Smartphone, Usb } from '../vendor/icons.js'
+import { CheckCircle2, Link2, MonitorSmartphone, RefreshCw, Smartphone, Usb } from '../vendor/icons.js'
 import { esc, icon } from '../dom.js'
 import { CATEGORY_ORDER, detectAll } from '../lib/detect.js'
 import { linked, localDevice, pairSummary } from '../device-store.js'
+import { showLink } from '../store.js'
 
 function trustedSection() {
   return `<section class="mb-7">
@@ -152,10 +153,15 @@ export const devicesView = {
           <p class="mt-1 text-sm text-muted-foreground">Every device and web capability this browser can see right now.</p>
           <p id="dev-scanned-at" class="mt-1 text-[11px] text-muted-foreground"></p>
         </div>
-        <button id="dev-scan" class="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent disabled:opacity-60">
-          <span id="dev-scan-icon">${icon(RefreshCw, 'size-3.5')}</span>
-          <span id="dev-scan-label">Scanning…</span>
-        </button>
+        <div class="flex items-center gap-2">
+          <button id="dev-link" class="flex items-center gap-2 rounded-xl bg-primary px-3 py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">
+            ${icon(Link2, 'size-3.5')} Link a device
+          </button>
+          <button id="dev-scan" class="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2.5 text-sm font-medium text-muted-foreground hover:bg-accent disabled:opacity-60">
+            <span id="dev-scan-icon">${icon(RefreshCw, 'size-3.5')}</span>
+            <span id="dev-scan-label">Scanning…</span>
+          </button>
+        </div>
       </div>
       <div id="dev-trusted-wrap"></div>
       <div id="dev-loading" class="flex items-center gap-2 rounded-2xl border border-border bg-card p-4 text-sm text-muted-foreground">
@@ -165,6 +171,7 @@ export const devicesView = {
     </div>`,
   init: (root) => {
     const scanBtn = root.querySelector('#dev-scan')
+    const linkBtn = root.querySelector('#dev-link')
     const scanIcon = root.querySelector('#dev-scan-icon')
     const scanLabel = root.querySelector('#dev-scan-label')
     const loading = root.querySelector('#dev-loading')
@@ -210,12 +217,15 @@ export const devicesView = {
     }
 
     scanBtn.addEventListener('click', refresh)
+    const openLink = () => showLink.set(true)
+    linkBtn.addEventListener('click', openLink)
     window.addEventListener('gamepadconnected', refresh)
     window.addEventListener('gamepaddisconnected', refresh)
     navigator.mediaDevices?.addEventListener?.('devicechange', refresh)
 
     state.cleanups.push(() => {
       scanBtn.removeEventListener('click', refresh)
+      linkBtn.removeEventListener('click', openLink)
       window.removeEventListener('gamepadconnected', refresh)
       window.removeEventListener('gamepaddisconnected', refresh)
       navigator.mediaDevices?.removeEventListener?.('devicechange', refresh)

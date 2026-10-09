@@ -36,6 +36,14 @@ export function isUnlocked() {
   return encKey !== null
 }
 
+/**
+ * The in-memory at-rest key, or null while locked. Media blobs are sealed with
+ * the same session key as localStorage atoms, so locked === unreadable media.
+ */
+export function sessionKey() {
+  return encKey
+}
+
 function storage() {
   return typeof localStorage !== 'undefined' ? localStorage : null
 }

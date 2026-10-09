@@ -6,7 +6,6 @@ import {
   Fingerprint,
   GalleryHorizontalEnd,
   KeyRound,
-  Link2,
   ListTodo,
   Menu,
   MessageCircle,
@@ -15,13 +14,13 @@ import {
   Search,
   Settings2,
   ShieldCheck,
-  Sparkles,
   Wifi,
   X,
 } from '../vendor/icons.js'
-import { avatar, brandMark, esc, icon } from '../dom.js'
+import { avatar, brandMark, esc, helpWrap, icon, initHelp } from '../dom.js'
+import { qrSvg } from '../qr.js'
 import { atom } from '../vendor/store.js'
-import { AGENT_CHAT, chats } from '../chats.js'
+import { chats } from '../chats.js'
 import { agentModel, agentPreviewText } from '../agent/model.js'
 import { chatView } from './chat.js'
 import { calendarView, contactsView, galleryView, openTaskCount, settingsView, taskList, tasksView, timelineView } from './panels.js'
@@ -38,19 +37,16 @@ import {
   threadFor,
 } from '../store.js'
 import {
-  bluetoothAvailable,
   currentPeerPayload,
   initDevices,
   linked,
   localDevice,
   pairCode,
   pairError,
-  pairFingerprint,
   pairState,
-  pairViaBluetooth,
   receivePeerPayload,
 } from '../device-store.js'
-import { enrollPasskey, initPasskey, lockPasskey, passkey, unlockPasskey } from '../passkey-store.js'
+import { enrollPasskey, lockPasskey, passkey, unlockPasskey } from '../passkey-store.js'
 import { initContacts } from '../contacts-store.js'
 
 const PROFILE_NAME = 'Alex Rivera'
@@ -58,26 +54,27 @@ const PROFILE_NAME = 'Alex Rivera'
 const navItems = [
   { label: 'Inbox', icon: MessageCircle, count: chats.get().reduce((total, chat) => total + (chat.unread || 0), 0) || 0 },
   { label: 'Contacts', icon: Contact },
-  { label: 'Devices', icon: MonitorSmartphone },
+  { label: 'Wallet', icon: KeyRound },
   { label: 'Calendar', icon: CalendarDays },
   { label: 'Tasks', icon: ListTodo, count: 0 },
   { label: 'Gallery', icon: GalleryHorizontalEnd },
   { label: 'Timeline', icon: Clock3 },
+  { label: 'Devices', icon: MonitorSmartphone },
+  { label: 'Settings', icon: Settings2 },
 ]
+
+import { walletView } from './wallet.js'
 
 const REGIONS = {
   Inbox: chatView,
   Contacts: contactsView,
+  Wallet: walletView,
   Devices: devicesView,
   Calendar: calendarView,
   Tasks: tasksView,
   Gallery: galleryView,
   Timeline: timelineView,
   Settings: settingsView,
-}
-
-function connectDevice() {
-  showLink.set(true)
 }
 
 function renderAuth(authModal) {
@@ -136,21 +133,6 @@ function navButton(item) {
   </button>`
 }
 
-const bottomItems = [
-  { label: 'S agent', custom: 'agent', icon: Sparkles },
-  { label: 'Devices', custom: 'devices', icon: MonitorSmartphone },
-  { label: 'Passkeys', custom: 'auth', icon: Fingerprint },
-  { label: 'Link a device', custom: 'link', icon: Link2 },
-  { label: 'Settings', custom: 'settings', icon: Settings2 },
-]
-
-function bottomButton(item) {
-  return `<button data-nav-custom="${item.custom}" data-side-row="btn" data-side-title="${esc(item.label)}" class="flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm text-muted-foreground hover:bg-accent hover:text-foreground">
-    ${icon(item.icon)}
-    <span data-side-hide>${esc(item.label)}</span>
-  </button>`
-}
-
 function encryptedNote(extraClass = '') {
   return `<div data-side-hide class="flex items-center gap-2 px-2 text-[11px] text-muted-foreground ${extraClass}">${icon(ShieldCheck, 'size-3.5 text-emerald-600')}End-to-end encrypted</div>`
 }
@@ -176,14 +158,14 @@ export function initWorkspace(root) {
             <div class="grid size-8 place-items-center rounded-xl bg-brand text-brand-foreground">${brandMark('size-4')}</div>
             <span data-side-hide class="text-[17px] font-semibold tracking-tight">S</span>
           </div>
-          <div data-side-row="profile" data-side-title="Alex Rivera · Personal space" class="mb-5 flex items-center gap-3 rounded-2xl border border-sidebar-border bg-card p-3 shadow-sm">
+          <button type="button" data-nav-custom="settings" data-side-row="profile" data-side-title="Alex Rivera · Personal space" class="mb-5 flex items-center gap-3 rounded-2xl border border-sidebar-border bg-card p-3 text-left shadow-sm hover:bg-accent">
             ${avatar('AR', 'bg-cyan-200 text-cyan-900', true)}
-            <div data-side-hide class="min-w-0">
-              <p class="truncate text-sm font-semibold">Alex Rivera</p>
-              <p class="text-[11px] text-muted-foreground">Personal space</p>
-            </div>
+            <span data-side-hide class="min-w-0">
+              <span class="block truncate text-sm font-semibold">Alex Rivera</span>
+              <span class="block text-[11px] text-muted-foreground">Personal space</span>
+            </span>
             ${icon(ChevronDown, 'ml-auto size-3.5 text-muted-foreground', 'data-side-hide')}
-          </div>
+          </button>
           <nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain" aria-label="Main navigation">
             ${navItems.map(navButton).join('')}
           </nav>
@@ -193,7 +175,6 @@ export function initWorkspace(root) {
               <span data-side-hide>Collapse sidebar</span>
               <kbd data-side-hide class="ml-auto rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘B</kbd>
             </button>
-            ${bottomItems.map(bottomButton).join('')}
             ${encryptedNote('mt-3 px-2 pt-3')}
           </div>
         </aside>
@@ -208,7 +189,6 @@ export function initWorkspace(root) {
             ${navItems.map(navButton).join('')}
           </nav>
           <div class="flex shrink-0 flex-col gap-1 border-t border-sidebar-border pt-3">
-            ${bottomItems.map(bottomButton).join('')}
             ${encryptedNote('mt-3 px-2 pt-1')}
           </div>
         </aside>
@@ -222,7 +202,7 @@ export function initWorkspace(root) {
             <div class="flex items-center gap-2">
               <button data-role="chats" aria-label="Open chats" aria-controls="chats-drawer" aria-expanded="false" class="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-accent lg:hidden">${icon(MessageCircle, 'size-3.5')}<span class="hidden sm:inline">Chats</span></button>
               <div class="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 py-2 pl-3 pr-2 text-xs text-muted-foreground focus-within:ring-2 focus-within:ring-ring/20 sm:flex">${icon(Search, 'size-3.5')}<input data-search aria-label="Search chats" placeholder="Search chats" autocomplete="off" class="w-32 bg-transparent text-xs text-foreground outline-none placeholder:text-muted-foreground" /><kbd class="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘K</kbd></div>
-              ${avatar('AR', 'bg-cyan-200 text-cyan-900', false, true)}
+              <button type="button" data-nav-custom="settings" aria-label="Open settings" class="rounded-full hover:ring-2 hover:ring-ring/20">${avatar('AR', 'bg-cyan-200 text-cyan-900', false, true)}</button>
             </div>
           </header>
 
@@ -233,7 +213,7 @@ export function initWorkspace(root) {
               <div class="mx-4 mt-8 shrink-0 rounded-2xl border border-border bg-muted/40 p-3">
                 <div class="mb-2 flex items-center gap-2 text-xs font-medium">${icon(Wifi, 'size-3.5 text-emerald-600')}&#160;<span data-device-count>Sync status</span></div>
                 <p class="text-[11px] leading-relaxed text-muted-foreground">Your messages, files and calls stay yours. No passwords. No third-party account.</p>
-                <button data-nav-custom="devices" class="mt-3 text-[11px] font-medium text-foreground underline underline-offset-4">Manage devices</button>
+                <button data-nav="Devices" class="mt-3 text-[11px] font-medium text-foreground underline underline-offset-4">Manage devices</button>
               </div>
             </div>
 
@@ -250,7 +230,7 @@ export function initWorkspace(root) {
           <button data-chat-close aria-label="Close chats" class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(X)}</button>
         </div>
         <div class="flex-1 overflow-y-auto"><div data-chat-rows class="flex flex-col gap-1"></div></div>
-        <button data-nav-custom="devices" class="mt-4 rounded-xl border border-border bg-muted/40 p-3 text-left text-[11px] text-muted-foreground hover:bg-accent">
+        <button data-nav="Devices" class="mt-4 rounded-xl border border-border bg-muted/40 p-3 text-left text-[11px] text-muted-foreground hover:bg-accent">
           <span class="flex items-center gap-2 text-xs font-medium text-foreground">${icon(Wifi, 'size-3.5 text-emerald-600')}<span data-device-count>Sync status</span></span>
           <span class="mt-1 block">Your messages, files and calls stay yours.</span>
         </button>
@@ -270,11 +250,10 @@ export function initWorkspace(root) {
       <div data-modal="link" class="fixed inset-0 z-50 grid place-items-center bg-foreground/25 p-4 backdrop-blur-sm hidden">
         <div role="dialog" aria-modal="true" class="w-full max-w-md rounded-3xl border border-border bg-card p-6 shadow-2xl">
           <div class="flex items-start justify-between">
-            <div><p class="text-lg font-semibold">Link a device</p><p class="mt-1 text-sm text-muted-foreground">Pair a second device over Bluetooth so it can decode messages sealed for it.</p></div>
+            <div><p class="text-lg font-semibold">Link a device</p><p class="mt-1 text-sm text-muted-foreground">Show this code to your other device to add it to S.</p></div>
             <button data-link-close aria-label="Close link device" class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(X)}</button>
           </div>
           <div data-link-body id="link-body" class="mt-5 flex flex-col gap-3"></div>
-          <p class="mt-4 text-center text-[10px] text-muted-foreground">Bluetooth handshake · private key never leaves its device · peer keeps only its public key</p>
         </div>
       </div>
     </main>
@@ -310,7 +289,7 @@ export function initWorkspace(root) {
 
   function syncNav() {
     const current = activeNav.get()
-    for (const btn of root.querySelectorAll('[data-nav]')) {
+    for (const btn of root.querySelectorAll('[data-nav][data-side-row="btn"]')) {
       const active = btn.dataset.nav === current
       btn.classList.toggle('bg-primary', active)
       btn.classList.toggle('text-primary-foreground', active)
@@ -420,11 +399,7 @@ export function initWorkspace(root) {
     region.innerHTML = view.html()
     activeRegion = view
     view.init?.(region)
-  }
-
-  function openAgentChat() {
-    activeChat.set(AGENT_CHAT)
-    activeNav.set('Inbox')
+    initHelp(region)
   }
 
   sidebar.addEventListener('click', (event) => {
@@ -439,24 +414,15 @@ export function initWorkspace(root) {
       activeNav.set(button.dataset.nav)
       return
     }
-    if (button.dataset.navCustom === 'agent') openAgentChat()
-    else if (button.dataset.navCustom === 'devices') activeNav.set('Devices')
-    else if (button.dataset.navCustom === 'auth') showAuth.set(true)
-    else if (button.dataset.navCustom === 'settings') activeNav.set('Settings')
-    else if (button.dataset.navCustom === 'link') connectDevice()
+    if (button.dataset.navCustom === 'settings') activeNav.set('Settings')
   })
 
   mobileNav.addEventListener('click', (event) => {
     const button = event.target.closest('[data-nav], [data-nav-custom]')
     if (!button) return
     mobileSidebarOpen.set(false)
-    const custom = button.dataset.navCustom
     if (button.dataset.nav) activeNav.set(button.dataset.nav)
-    else if (custom === 'agent') openAgentChat()
-    else if (custom === 'devices') activeNav.set('Devices')
-    else if (custom === 'auth') showAuth.set(true)
-    else if (custom === 'settings') activeNav.set('Settings')
-    else if (custom === 'link') connectDevice()
+    else if (button.dataset.navCustom === 'settings') activeNav.set('Settings')
   })
 
   mobileOverlay.addEventListener('click', () => mobileSidebarOpen.set(false))
@@ -477,8 +443,9 @@ export function initWorkspace(root) {
       chatsDrawerOpen.set(false)
       return
     }
-    if (event.target.closest('[data-nav-custom="devices"]')) {
-      activeNav.set('Devices')
+    const navBtn = event.target.closest('[data-nav]')
+    if (navBtn) {
+      activeNav.set(navBtn.dataset.nav)
       chatsDrawerOpen.set(false)
     }
   })
@@ -492,8 +459,8 @@ export function initWorkspace(root) {
       activeNav.set('Inbox')
       return
     }
-    const devicesBtn = target.closest('[data-nav-custom="devices"]')
-    if (devicesBtn) activeNav.set('Devices')
+    const navBtn = target.closest('[data-nav]')
+    if (navBtn) activeNav.set(navBtn.dataset.nav)
     const newChatBtn = target.closest('[data-new-chat]')
     if (newChatBtn) activeNav.set('Contacts')
   })
@@ -524,29 +491,46 @@ export function initWorkspace(root) {
     const peers = linked.get()
     const state = pairState.get()
     if (!local) {
-      linkBody.innerHTML = '<div class="text-sm text-muted-foreground">Initializing this device…</div>'
+      linkBody.innerHTML = '<div class="text-sm text-muted-foreground">Setting up this device…</div>'
       return
     }
-    const rows = [linkDeviceCard(local)]
+    let payload = ''
+    try {
+      payload = await currentPeerPayload()
+    } catch {
+      payload = ''
+    }
+    const rows = []
+    rows.push(linkDeviceCard(local))
+    if (payload) {
+      rows.push(
+        `<div class="flex flex-col items-center gap-2 rounded-2xl border border-border bg-muted/40 p-4">
+          <div class="rounded-2xl bg-white p-2.5 shadow-sm">${qrSvg(payload, { size: 176, label: 'Link code for this device' })}</div>
+          <p class="text-xs text-muted-foreground">Scan this on your other device</p>
+          <button data-link-copy class="text-[11px] font-medium text-foreground underline underline-offset-4">Copy link code</button>
+        </div>`,
+      )
+    }
     if (state === 'ready' && pairCode.get()) {
       rows.push(
-        `<div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-3 text-center">
-          <p class="text-[10px] uppercase tracking-[0.14em] text-emerald-600">Verify on both devices</p>
-          <p class="mt-1 font-mono text-2xl font-semibold tracking-[0.2em]">${esc(pairCode.get())}</p>
-          <p class="mt-1 text-[11px] text-muted-foreground">fingerprint ${esc(pairFingerprint.get() ?? '')}</p>
+        `<div class="rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4 text-center">
+          <p class="text-[10px] uppercase tracking-[0.14em] text-emerald-600">Check this matches</p>
+          <p class="mt-1 font-mono text-3xl font-semibold tracking-[0.3em]">${esc(pairCode.get())}</p>
+          <p class="mt-1 text-[11px] text-muted-foreground">Both devices should show the same six digits.</p>
         </div>`,
       )
     }
     if (state === 'error') {
-      rows.push(`<div class="rounded-xl bg-rose-500/10 p-2.5 text-[11px] text-rose-600">${esc(pairError.get() ?? 'pairing failed')}</div>`)
+      rows.push(`<div class="rounded-xl bg-rose-500/10 p-2.5 text-[11px] text-rose-600">${esc(pairError.get() ?? 'linking failed')}</div>`)
     }
     rows.push(
-      `<div class="flex flex-col gap-2">
-        <button data-link-bt ${bluetoothAvailable() ? '' : 'disabled class="disabled:opacity-50 cursor-not-allowed"'} class="w-full rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">${bluetoothAvailable() ? 'Link via Bluetooth' : 'Web Bluetooth unavailable here'}</button>
-        <div class="my-1 flex items-center gap-2 text-[10px] text-muted-foreground"><span class="h-px flex-1 bg-border"></span>or copy the payload<span class="h-px flex-1 bg-border"></span></div>
-        <textarea data-link-payload rows="2" placeholder='Paste the other device payload (JSON like {"v":1,"id":…,"pub":…})' class="w-full resize-none rounded-xl border border-border bg-background p-2.5 font-mono text-[10px] outline-none placeholder:text-muted-foreground/60"></textarea>
-        <button data-link-complete class="w-full rounded-xl border border-border bg-muted/40 py-2.5 text-sm font-medium text-foreground hover:bg-accent">Verify &amp; link</button>
-      </div>`,
+      `<details class="rounded-2xl border border-border bg-background p-3">
+        <summary class="cursor-pointer text-xs font-medium text-muted-foreground">Can't scan? Enter a code instead</summary>
+        <div class="mt-3 flex flex-col gap-2">
+          <textarea data-link-payload rows="2" placeholder="Paste the link code from the other device" class="w-full resize-none rounded-xl border border-border bg-muted/40 p-2.5 font-mono text-[10px] outline-none placeholder:text-muted-foreground/60"></textarea>
+          <button data-link-complete class="w-full rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">Link</button>
+        </div>
+      </details>`,
     )
     rows.push(
       peers.length
@@ -574,8 +558,10 @@ export function initWorkspace(root) {
   linkModal.querySelector('[data-link-close]').addEventListener('click', () => showLink.set(false))
   linkModal.addEventListener('click', (event) => {
     const target = event.target
-    if (target.closest('[data-link-bt]') && bluetoothAvailable()) {
-      void pairViaBluetooth().then(renderLinkBody)
+    if (target.closest('[data-link-copy]')) {
+      void currentPeerPayload()
+        .then((payload) => navigator.clipboard?.writeText(payload))
+        .catch(() => {})
     } else if (target.closest('[data-link-complete]')) {
       void submitPeerPayload()
     }

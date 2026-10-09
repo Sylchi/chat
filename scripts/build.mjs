@@ -3,6 +3,9 @@ import { cpSync, mkdirSync, rmSync } from 'node:fs'
 import { dirname, join, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
+// Regenerate favicons / app icons / OG card into public/ before it is copied.
+import './gen-icons.mjs'
+
 const root = join(dirname(fileURLToPath(import.meta.url)), '..')
 const out = join(root, 'out')
 

@@ -17,9 +17,10 @@ import {
   Zap,
 } from '../vendor/icons.js'
 import { batch } from '../vendor/store.js'
-import { avatar, esc, formatBytes, icon } from '../dom.js'
+import { avatar, esc, formatBytes, helpWrap, icon } from '../dom.js'
 import { AGENT_CHAT, chatMeta } from '../chats.js'
 import { activeChat, appendMessage, draft, sharedFiles, threadFor, threads, updateMessage } from '../store.js'
+import { getMedia, putMedia } from '../media-store.js'
 import {
   agentBusy,
   agentModel,
@@ -50,9 +51,21 @@ const DOTS = `<span class="flex items-center gap-1 py-1"><span class="size-1.5 a
 const emojiButton = (char, keywords) =>
   `<button type="button" data-emoji="${esc(char)}" title="${esc(keywords)}" class="rounded-lg p-1 text-lg leading-none hover:bg-accent">${char}</button>`
 
+function renderAttachment(item) {
+  const isImage = String(item.type).startsWith('image/')
+  return `<button type="button" data-attachment="${esc(item.id)}" class="mt-2 block w-full max-w-[240px] overflow-hidden rounded-xl border border-border/50 text-left">
+    ${
+      isImage
+        ? `<img data-attachment-thumb="${esc(item.id)}" alt="${esc(item.name)}" class="max-h-56 w-full object-cover" />`
+        : `<span class="flex items-center gap-2 bg-background/60 px-2.5 py-2 text-[11px] font-medium text-foreground">${icon(FileImage, 'size-3.5')}<span class="truncate">${esc(item.name)}</span><span class="ml-auto shrink-0 text-muted-foreground">${formatBytes(item.size)}</span></span>`
+    }
+  </button>`
+}
+
 function renderMessage(message, meta) {
   const fromMe = message.from === 'me'
-  const body = `<p${message.id ? ` data-msg-body="${esc(message.id)}"` : ''}>${message.pending ? DOTS : esc(message.text)}</p>`
+  const body = message.text || message.pending ? `<p${message.id ? ` data-msg-body="${esc(message.id)}"` : ''}>${message.pending ? DOTS : esc(message.text)}</p>` : ''
+  const attachments = (message.attachments ?? []).map(renderAttachment).join('')
   const action =
     message.action === 'load-model'
       ? `<button data-action="open-model" class="mt-2 inline-flex items-center gap-1.5 rounded-lg bg-primary px-2.5 py-1.5 text-[11px] font-medium text-primary-foreground">${icon(Download, 'size-3')}Load a model</button>`
@@ -62,7 +75,7 @@ function renderMessage(message, meta) {
     <div class="flex items-end gap-2 ${fromMe ? 'justify-end' : ''}">
       ${fromMe ? '' : avatar(meta.initials, meta.color, meta.online)}
       <div class="max-w-[78%] rounded-2xl px-4 py-3 text-sm ${fromMe ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md bg-muted'}">
-        ${body}${action}
+        ${body}${attachments}${action}
         <div class="mt-1.5 flex items-center justify-end gap-1 text-[10px] ${fromMe ? 'text-primary-foreground/65' : 'text-muted-foreground'}">
           ${esc(message.time)}${message.sealed ? icon(ShieldCheck, 'size-3') : ''}${fromMe ? icon(Check, 'size-3') : ''}${stats}
         </div>
@@ -140,7 +153,9 @@ function headerHtml() {
     <div class="flex items-center gap-3">
       ${avatar(meta.initials, meta.color, meta.online)}
       <div>
-        <h2 id="chat-title" class="text-sm font-semibold">${esc(name)}</h2>
+        <div class="flex items-center gap-1">
+          <h2 id="chat-title" class="text-sm font-semibold">${esc(name)}</h2>${helpWrap('help-chat', 'Messages are sealed to this contact before they leave your device. Photos, videos and voice notes are stored encrypted and only readable while S is unlocked.', 'About this chat')}
+        </div>
         <p class="text-[11px] text-muted-foreground">${meta.online ? 'online' : 'end-to-end encrypted'}</p>
       </div>
     </div>`
@@ -226,6 +241,19 @@ function modelModalHtml() {
     </div>`
 }
 
+function mediaModalHtml() {
+  return `
+    <div data-modal="media" class="hidden absolute inset-0 z-40 grid place-items-center bg-foreground/40 p-4 backdrop-blur-sm">
+      <div role="dialog" aria-modal="true" class="w-full max-w-2xl overflow-hidden rounded-3xl border border-border bg-card shadow-2xl">
+        <div class="flex items-center justify-between gap-3 border-b border-border p-4">
+          <div class="min-w-0"><p data-media-title class="truncate text-sm font-semibold"></p><p data-media-meta class="text-xs text-muted-foreground"></p></div>
+          <button data-media-close aria-label="Close attachment" class="rounded-lg p-2 text-muted-foreground hover:bg-accent">${icon(X)}</button>
+        </div>
+        <div data-media-view class="grid max-h-[70vh] place-items-center overflow-auto bg-muted/40 p-3"></div>
+      </div>
+    </div>`
+}
+
 function emojiPickerHtml() {
   return `
     <div data-emoji-picker class="absolute bottom-full right-0 z-30 mb-2 hidden w-[300px] rounded-2xl border border-border bg-card p-3 shadow-xl">
@@ -290,7 +318,7 @@ export const chatView = {
             <button data-role="attach" aria-label="Attach files" class="rounded-xl p-2 text-muted-foreground hover:bg-accent">${icon(Paperclip)}</button>
             <textarea id="composer" rows="1" placeholder="${isAgent() ? 'Ask S anything…' : 'Write a message…'}" class="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-1 py-2 text-sm outline-none placeholder:text-muted-foreground">${esc(draft.get())}</textarea>
             <button data-role="emoji" aria-label="Insert emoji" class="rounded-xl p-2 text-muted-foreground hover:bg-accent">${icon(Smile)}</button>
-            <button class="rounded-xl p-2 text-muted-foreground hover:bg-accent">${icon(Mic)}</button>
+            <button data-role="mic" aria-label="Record voice note" class="rounded-xl p-2 text-muted-foreground hover:bg-accent">${icon(Mic)}</button>
             <button data-role="send" aria-label="Send message" class="grid size-9 place-items-center rounded-xl bg-primary text-primary-foreground transition-transform hover:scale-105"><span data-send-icon>${icon(Send)}</span><span data-send-stop class="hidden">${icon(X, 'size-4')}</span></button>
           </div>
           ${emojiPickerHtml()}
@@ -304,17 +332,23 @@ export const chatView = {
         <p class="mt-2 text-center text-[10px] text-muted-foreground">Free forever · No ads · No tracking</p>
       </div>
       ${modelModalHtml()}
+      ${mediaModalHtml()}
     </section>`,
   init: (root) => {
     const fileInput = root.querySelector('#s-file-picker')
     const attachBtn = root.querySelector('[data-role="attach"]')
     const sendBtn = root.querySelector('[data-role="send"]')
     const emojiBtn = root.querySelector('[data-role="emoji"]')
+    const micBtn = root.querySelector('[data-role="mic"]')
     const composer = root.querySelector('#composer')
     const thread = root.querySelector('#thread-messages')
     const header = root.querySelector('#chat-header')
     const chips = root.querySelector('[data-role="chips"]')
     const modelModal = root.querySelector('[data-modal="model"]')
+    const mediaModal = root.querySelector('[data-modal="media"]')
+    const mediaView = root.querySelector('[data-media-view]')
+    const mediaTitle = root.querySelector('[data-media-title]')
+    const mediaMeta = root.querySelector('[data-media-meta]')
     const picker = root.querySelector('[data-emoji-picker]')
     const pickerList = root.querySelector('[data-emoji-list]')
     const pickerSearch = root.querySelector('[data-emoji-search]')
@@ -324,6 +358,48 @@ export const chatView = {
     const hintText = root.querySelector('[data-agent-hint-text]')
     const cleanups = []
     let uiSource = agentModel.get().source
+    const attachmentUrls = new Set()
+    let activeMediaId = null
+
+    /* ---------------- attachments ---------------- */
+
+    const releaseAttachmentUrls = () => {
+      for (const url of attachmentUrls) URL.revokeObjectURL(url)
+      attachmentUrls.clear()
+    }
+
+    // Resolve stored media ids to object URLs after a thread re-render.
+    const hydrateAttachments = async () => {
+      const thumbs = [...thread.querySelectorAll('[data-attachment-thumb]')]
+      for (const img of thumbs) {
+        const record = await getMedia(img.dataset.attachmentThumb).catch(() => null)
+        if (!record) continue
+        const url = URL.createObjectURL(record.blob)
+        attachmentUrls.add(url)
+        img.src = url
+      }
+    }
+
+    const openMediaModal = async (id) => {
+      const record = await getMedia(id).catch(() => null)
+      if (!record) return
+      const url = URL.createObjectURL(record.blob)
+      attachmentUrls.add(url)
+      activeMediaId = id
+      mediaTitle.textContent = record.name
+      mediaMeta.textContent = `${record.type || 'file'} · ${formatBytes(record.size)}`
+      mediaView.innerHTML = record.type.startsWith('image/')
+        ? `<img src="${url}" alt="${esc(record.name)}" class="max-h-[65vh] w-auto rounded-xl object-contain" />`
+        : record.type.startsWith('video/')
+          ? `<video src="${url}" controls class="max-h-[65vh] w-auto rounded-xl"></video>`
+          : `<audio src="${url}" controls class="w-full"></audio>`
+      mediaModal.classList.remove('hidden')
+    }
+
+    const closeMediaModal = () => {
+      mediaModal.classList.add('hidden')
+      activeMediaId = null
+    }
 
     /* ---------------- header / thread ---------------- */
 
@@ -340,8 +416,10 @@ export const chatView = {
     }
 
     const renderThreadInto = () => {
+      releaseAttachmentUrls()
       thread.innerHTML = renderThread()
       scrollToBottom()
+      void hydrateAttachments()
     }
 
     const renderChipsInto = () => {
@@ -539,12 +617,27 @@ export const chatView = {
       }
     }
 
-    const send = () => {
+    const persistAttachments = async (files) => {
+      const stored = []
+      for (const file of files) {
+        try {
+          const id = await putMedia(file, file.name)
+          stored.push({ id, name: file.name || 'file', type: file.type || 'application/octet-stream', size: file.size })
+        } catch (error) {
+          console.error('[S] failed to store attachment', error)
+        }
+      }
+      return stored
+    }
+
+    const send = async (filesOverride) => {
       const name = activeChat.get()
       const text = draft.get().trim()
-      if (!text || agentBusy.get()) return
+      const files = Array.from(filesOverride ?? sharedFiles.get()).filter(Boolean)
+      if (agentBusy.get()) return
 
       if (isAgent(name)) {
+        if (!text) return
         const state = agentModel.get()
         if (state.status === 'loading') {
           openModelPanel()
@@ -576,13 +669,16 @@ export const chatView = {
         return
       }
 
+      if (!text && !files.length) return
       const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+      const attachments = files.length ? await persistAttachments(files) : []
       batch(() => {
-        appendMessage(name, { from: 'me', id, text, time: 'Now' })
+        appendMessage(name, { from: 'me', id, text, time: 'Now', ...(attachments.length ? { attachments } : {}) })
         draft.set('')
         composer.value = ''
+        sharedFiles.set([])
       })
-      void sealInto(name, id, text)
+      if (text) void sealInto(name, id, text)
     }
 
     // Seal the outgoing text to the contact's identity and attach the envelope.
@@ -616,6 +712,47 @@ export const chatView = {
     }
     const onClickAttach = () => void chooseFiles()
     const onFileChange = () => handleFiles(fileInput.files)
+
+    // Voice notes: record with MediaRecorder and send the blob as a message.
+    const micSupported = typeof MediaRecorder !== 'undefined' && !!navigator.mediaDevices?.getUserMedia
+    if (!micSupported) micBtn.classList.add('hidden')
+    let recorder = null
+    let recStream = null
+    let recChunks = []
+    const onClickMic = async () => {
+      if (recorder) {
+        recorder.stop()
+        return
+      }
+      if (!micSupported) return
+      try {
+        recStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      } catch (error) {
+        console.error('[S] microphone unavailable', error)
+        return
+      }
+      recChunks = []
+      const preferred = ['audio/webm', 'audio/mp4', 'audio/ogg'].find((type) => MediaRecorder.isTypeSupported?.(type))
+      recorder = new MediaRecorder(recStream, preferred ? { mimeType: preferred } : undefined)
+      recorder.addEventListener('dataavailable', (event) => {
+        if (event.data?.size) recChunks.push(event.data)
+      })
+      recorder.addEventListener('stop', () => {
+        const mime = recorder?.mimeType || 'audio/webm'
+        for (const track of recStream?.getTracks() ?? []) track.stop()
+        micBtn.classList.remove('bg-rose-500', 'text-white')
+        const blob = new Blob(recChunks, { type: mime })
+        recorder = null
+        recStream = null
+        if (blob.size) {
+          const ext = (mime.split('/')[1] || 'webm').split(';')[0]
+          const file = new File([blob], `Voice note ${new Date().toLocaleTimeString()}.${ext}`, { type: mime })
+          void send([file])
+        }
+      })
+      recorder.start()
+      micBtn.classList.add('bg-rose-500', 'text-white')
+    }
     const onClickEmoji = (event) => {
       event.stopPropagation()
       togglePicker()
@@ -628,6 +765,11 @@ export const chatView = {
     }
     const onDocumentKeydown = (event) => {
       if (event.key !== 'Escape') return
+      if (!mediaModal.classList.contains('hidden')) {
+        closeMediaModal()
+        event.stopPropagation()
+        return
+      }
       if (!modelModal.classList.contains('hidden')) {
         closeModelPanel()
         event.stopPropagation()
@@ -645,6 +787,7 @@ export const chatView = {
     attachBtn.addEventListener('click', onClickAttach)
     fileInput.addEventListener('change', onFileChange)
     emojiBtn.addEventListener('click', onClickEmoji)
+    micBtn.addEventListener('click', onClickMic)
     pickerSearch.addEventListener('input', onEmojiSearch)
     document.addEventListener('click', onDocumentClick)
     document.addEventListener('keydown', onDocumentKeydown, true)
@@ -656,6 +799,11 @@ export const chatView = {
     })
 
     thread.addEventListener('click', (event) => {
+      const attachment = event.target.closest('[data-attachment]')
+      if (attachment) {
+        void openMediaModal(attachment.dataset.attachment)
+        return
+      }
       const suggest = event.target.closest('[data-suggest]')
       if (suggest) {
         const text = suggest.dataset.suggest ?? ''
@@ -666,6 +814,10 @@ export const chatView = {
         return
       }
       if (event.target.closest('[data-action="open-model"]')) openModelPanel()
+    })
+
+    mediaModal.addEventListener('click', (event) => {
+      if (event.target === mediaModal || event.target.closest('[data-media-close]')) closeMediaModal()
     })
 
     header.addEventListener('click', (event) => {
@@ -734,6 +886,7 @@ export const chatView = {
       () => attachBtn.removeEventListener('click', onClickAttach),
       () => fileInput.removeEventListener('change', onFileChange),
       () => emojiBtn.removeEventListener('click', onClickEmoji),
+      () => micBtn.removeEventListener('click', onClickMic),
       () => pickerSearch.removeEventListener('input', onEmojiSearch),
       () => document.removeEventListener('click', onDocumentClick),
       () => document.removeEventListener('keydown', onDocumentKeydown, true),
@@ -779,6 +932,8 @@ export const chatView = {
 
     disposeChat = () => {
       for (const cleanup of cleanups) cleanup()
+      if (recorder) recorder.stop()
+      releaseAttachmentUrls()
     }
   },
   destroy: () => {

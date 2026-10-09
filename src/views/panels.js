@@ -1,10 +1,11 @@
-import { CalendarDays, Clock3, GalleryHorizontalEnd, ListTodo, Plus, X } from '../vendor/icons.js'
-import { avatar, esc, icon } from '../dom.js'
+import { CalendarDays, Clock3, Fingerprint, GalleryHorizontalEnd, ListTodo, Plus, Trash2, X } from '../vendor/icons.js'
+import { avatar, esc, formatBytes, helpWrap, icon } from '../dom.js'
 import { chatMeta } from '../chats.js'
-import { activeChat, activeNav, completedTasks, persistentAtom, threads } from '../store.js'
+import { activeChat, activeNav, completedTasks, persistentAtom, showAuth, threads } from '../store.js'
 import { addContact, contacts } from '../contacts-store.js'
 import { localDevice } from '../device-store.js'
-import { lockPasskey } from '../passkey-store.js'
+import { lockPasskey, passkey } from '../passkey-store.js'
+import { deleteMedia, getMedia, listMedia } from '../media-store.js'
 import { hasCachedModel } from '../agent/model.js'
 
 const DEFAULT_TASKS = [
@@ -325,6 +326,8 @@ function renderTasks() {
 let disposeCal = null
 let disposeTasks = null
 let disposeSettings = null
+let disposeGallery = null
+let disposeTimeline = null
 
 export const settingsView = {
   html: () => `
@@ -336,11 +339,18 @@ export const settingsView = {
       </div>
       <div class="flex max-w-xl flex-col gap-3">
         <section class="rounded-2xl border border-border bg-card p-4">
-          <h3 class="text-sm font-semibold">This device</h3>
+          <div class="flex items-center gap-1.5"><h3 class="text-sm font-semibold">This device</h3>${helpWrap('help-settings-device', 'The device you are using right now. Its key stays here — other devices you add each get their own.', 'About this device')}</div>
           <div data-settings-device class="mt-2 flex flex-col gap-1.5 text-xs text-muted-foreground"></div>
         </section>
         <section class="rounded-2xl border border-border bg-card p-4">
-          <h3 class="text-sm font-semibold">At-rest encryption</h3>
+          <div class="flex items-center gap-1.5"><h3 class="text-sm font-semibold">Security</h3>${helpWrap('help-settings-security', 'A passkey is how you unlock S. It is stored by your device or password manager and is never sent to us.', 'About passkeys')}</div>
+          <button data-settings-passkeys class="mt-3 flex w-full items-center gap-3 rounded-xl border border-border bg-muted/40 p-3 text-left hover:bg-accent">
+            ${icon(Fingerprint, 'size-5 text-primary')}
+            <span class="min-w-0 flex-1"><span class="block text-sm font-medium">Passkeys</span><span data-settings-passkey-status class="block text-xs text-muted-foreground">…</span></span>
+          </button>
+        </section>
+        <section class="rounded-2xl border border-border bg-card p-4">
+          <div class="flex items-center gap-1.5"><h3 class="text-sm font-semibold">At-rest encryption</h3>${helpWrap('help-settings-atrest', 'Your key lives only in memory while S is unlocked. Locking S throws it away, so nothing on disk can be read until you unlock again.', 'About at-rest encryption')}</div>
           <p class="mt-1.5 text-xs leading-relaxed text-muted-foreground">Everything stored on this device is sealed with a key derived from your passkey. While S is locked, nothing stored here is readable — not even the media you send.</p>
           <button data-settings-lock class="mt-3 w-full rounded-xl bg-primary py-2.5 text-sm font-medium text-primary-foreground hover:bg-primary/90">Lock S now</button>
         </section>
@@ -356,6 +366,7 @@ export const settingsView = {
   init: (root) => {
     const deviceBox = root.querySelector('[data-settings-device]')
     const stats = root.querySelector('[data-settings-stats]')
+    const passkeyStatus = root.querySelector('[data-settings-passkey-status]')
     const offs = []
     const renderDevice = () => {
       const dev = localDevice.get()
@@ -369,10 +380,20 @@ export const settingsView = {
       const count = Object.keys(threads.get()).length
       stats.textContent = `${contacts.get().length} contacts · ${count} chat${count === 1 ? '' : 's'} · local agent model ${hasCachedModel() ? 'cached' : 'not loaded'}`
     }
+    const renderPasskey = () => {
+      passkeyStatus.textContent = passkey.get().enrolled ? 'Set up · tap to manage' : 'Not set up yet · tap to create'
+    }
     renderDevice()
     renderStats()
-    offs.push(localDevice.subscribe(renderDevice), threads.subscribe(renderStats), contacts.subscribe(renderStats))
+    renderPasskey()
+    offs.push(
+      localDevice.subscribe(renderDevice),
+      threads.subscribe(renderStats),
+      contacts.subscribe(renderStats),
+      passkey.subscribe(renderPasskey),
+    )
     root.querySelector('[data-settings-lock]').addEventListener('click', () => lockPasskey())
+    root.querySelector('[data-settings-passkeys]').addEventListener('click', () => showAuth.set(true))
     disposeSettings = () => { for (const off of offs) off() }
   },
   destroy: () => {
@@ -386,20 +407,124 @@ export const galleryView = {
     <div class="flex-1 overflow-auto p-5 sm:p-8">
       <div class="mb-6">
         <p class="text-xs font-medium uppercase tracking-[0.16em] text-muted-foreground">Gallery</p>
-        <h2 class="mt-1 text-2xl font-semibold">Gallery</h2>
+        <div class="mt-1 flex items-center gap-1.5"><h2 class="text-2xl font-semibold">Gallery</h2>${helpWrap('help-gallery', 'Photos, videos and voice notes you send in a chat are stored here, sealed with your key. They are unreadable while S is locked.', 'About the gallery')}</div>
         <p class="mt-1 text-sm text-muted-foreground">Shared moments, kept private</p>
       </div>
-      <div class="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        ${['Saturday light', 'Maya · portrait set', 'Design crew · final deck', 'Weekend notes', 'Golden hour', 'Shared references']
-          .map(
-            (item, index) => `
-              <div class="flex aspect-square items-end rounded-2xl border border-border p-4 ${['bg-amber-100', 'bg-sky-100', 'bg-violet-100', 'bg-emerald-100', 'bg-rose-100', 'bg-orange-100'][index]}">
-                <span class="text-sm font-medium text-foreground/75">${esc(item)}</span>
-              </div>`,
-          )
-          .join('')}
+      <div id="gallery-grid" class="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4"></div>
+      <div data-gallery-modal class="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4 backdrop-blur-sm hidden">
+        <div role="dialog" aria-modal="true" class="w-full max-w-2xl overflow-hidden rounded-3xl border border-border bg-card shadow-2xl">
+          <div class="flex items-center justify-between gap-3 border-b border-border p-4">
+            <div class="min-w-0"><p data-gallery-title class="truncate text-sm font-semibold"></p><p data-gallery-meta class="text-xs text-muted-foreground"></p></div>
+            <div class="flex items-center gap-1">
+              <button data-gallery-delete aria-label="Delete media" class="rounded-lg p-2 text-muted-foreground hover:bg-accent">${icon(Trash2, 'size-4')}</button>
+              <button data-gallery-close aria-label="Close media" class="rounded-lg p-2 text-muted-foreground hover:bg-accent">${icon(X)}</button>
+            </div>
+          </div>
+          <div data-gallery-view class="grid max-h-[70vh] place-items-center overflow-auto bg-muted/40 p-3"></div>
+        </div>
       </div>
     </div>`,
+  init: (root) => {
+    const grid = root.querySelector('#gallery-grid')
+    const modal = root.querySelector('[data-gallery-modal]')
+    const view = root.querySelector('[data-gallery-view]')
+    const titleEl = root.querySelector('[data-gallery-title]')
+    const metaEl = root.querySelector('[data-gallery-meta]')
+    const urls = new Set()
+    let activeId = null
+    let closed = false
+
+    const releaseUrls = () => {
+      for (const url of urls) URL.revokeObjectURL(url)
+      urls.clear()
+    }
+
+    const openMedia = async (id) => {
+      const record = await getMedia(id)
+      if (!record || closed) return
+      const url = URL.createObjectURL(record.blob)
+      urls.add(url)
+      activeId = id
+      titleEl.textContent = record.name
+      metaEl.textContent = `${record.type || 'file'} · ${formatBytes(record.size)}`
+      view.innerHTML = record.type.startsWith('image/')
+        ? `<img src="${url}" alt="${esc(record.name)}" class="max-h-[65vh] w-auto rounded-xl object-contain" />`
+        : record.type.startsWith('video/')
+          ? `<video src="${url}" controls class="max-h-[65vh] w-auto rounded-xl"></video>`
+          : `<audio src="${url}" controls class="w-full"></audio>`
+      modal.classList.remove('hidden')
+    }
+
+    const render = async () => {
+      const items = await listMedia()
+      if (closed) return
+      releaseUrls()
+      if (!items.length) {
+        grid.innerHTML = `<div class="col-span-full rounded-2xl border border-dashed border-border bg-muted/30 p-8 text-center">
+          ${icon(GalleryHorizontalEnd, 'mx-auto size-5 text-muted-foreground')}
+          <p class="mt-2 text-sm font-medium">Nothing here yet</p>
+          <p class="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">Attach a photo or record a voice note in a chat and it will show up here.</p>
+        </div>`
+        return
+      }
+      grid.innerHTML = items
+        .map((item) => {
+          const isImage = String(item.type).startsWith('image/')
+          return `<button data-gallery-item="${esc(item.id)}" class="group relative flex aspect-square items-end overflow-hidden rounded-2xl border border-border bg-muted/40 p-3 text-left hover:ring-2 hover:ring-ring/30">
+            ${isImage ? `<img data-gallery-thumb="${esc(item.id)}" alt="" class="absolute inset-0 size-full object-cover" />` : `<span class="absolute inset-0 grid place-items-center text-muted-foreground">${icon(GalleryHorizontalEnd, 'size-6')}</span>`}
+            <span class="relative z-10 max-w-full truncate rounded-lg bg-background/80 px-2 py-1 text-[11px] font-medium">${esc(item.name)}</span>
+          </button>`
+        })
+        .join('')
+      for (const item of items) {
+        if (!String(item.type).startsWith('image/')) continue
+        const record = await getMedia(item.id)
+        if (closed || !record) continue
+        const url = URL.createObjectURL(record.blob)
+        urls.add(url)
+        const thumb = grid.querySelector(`[data-gallery-thumb="${item.id}"]`)
+        if (thumb) thumb.src = url
+      }
+    }
+
+    root.addEventListener('click', (event) => {
+      const itemBtn = event.target.closest('[data-gallery-item]')
+      if (itemBtn) {
+        void openMedia(itemBtn.dataset.galleryItem)
+        return
+      }
+      if (event.target.closest('[data-gallery-close]') || event.target === modal) {
+        modal.classList.add('hidden')
+        activeId = null
+        return
+      }
+      if (event.target.closest('[data-gallery-delete]')) {
+        void deleteMedia(activeId).then(() => {
+          modal.classList.add('hidden')
+          activeId = null
+          return render()
+        })
+      }
+    })
+
+    const onKey = (event) => {
+      if (event.key === 'Escape' && !modal.classList.contains('hidden')) {
+        event.stopPropagation()
+        modal.classList.add('hidden')
+      }
+    }
+    document.addEventListener('keydown', onKey, true)
+    void render()
+    disposeGallery = () => {
+      closed = true
+      releaseUrls()
+      document.removeEventListener('keydown', onKey, true)
+    }
+  },
+  destroy: () => {
+    disposeGallery?.()
+    disposeGallery = null
+  },
 }
 
 export const timelineView = {
@@ -410,19 +535,39 @@ export const timelineView = {
         <h2 class="mt-1 text-2xl font-semibold">Timeline</h2>
         <p class="mt-1 text-sm text-muted-foreground">A private record of your life in S</p>
       </div>
-      <div class="flex flex-col gap-3">
-        ${['New photo set added to Gallery', 'Maya replied to your message', 'Task completed: Review privacy settings', 'Device synced via WebBluetooth']
-          .map(
-            (item) => `
-              <div class="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
-                <div class="grid size-9 place-items-center rounded-xl bg-muted">${icon(Clock3, 'size-4 text-muted-foreground')}</div>
-                <div>
-                  <p class="text-sm font-medium">${esc(item)}</p>
-                  <p class="text-xs text-muted-foreground">Private activity · just now</p>
-                </div>
-              </div>`,
-          )
-          .join('')}
-      </div>
+      <div id="timeline-list" class="flex flex-col gap-3">${renderTimeline()}</div>
     </div>`,
+  init: (root) => {
+    const list = root.querySelector('#timeline-list')
+    const render = () => {
+      list.innerHTML = renderTimeline()
+    }
+    disposeTimeline = calendarEvents.subscribe(render)
+  },
+  destroy: () => {
+    disposeTimeline?.()
+    disposeTimeline = null
+  },
+}
+
+function renderTimeline() {
+  const events = calendarEvents.get()
+  if (!events.length) {
+    return `<div class="rounded-2xl border border-dashed border-border bg-muted/30 p-6 text-center text-sm text-muted-foreground">Nothing on your timeline yet — add an event on the Calendar and it will appear here.</div>`
+  }
+  return [...events]
+    .sort((a, b) => new Date(b.when).getTime() - new Date(a.when).getTime())
+    .map((event) => {
+      const when = new Date(event.when)
+      const label = Number.isNaN(when.getTime()) ? event.when : when.toLocaleString()
+      return `
+        <div class="flex items-center gap-3 rounded-2xl border border-border bg-card p-4">
+          <div class="grid size-9 place-items-center rounded-xl bg-muted">${icon(Clock3, 'size-4 text-muted-foreground')}</div>
+          <div class="min-w-0">
+            <p class="truncate text-sm font-medium">${esc(event.title)}</p>
+            <p class="text-xs text-muted-foreground">${esc(label)}</p>
+          </div>
+        </div>`
+    })
+    .join('')
 }
