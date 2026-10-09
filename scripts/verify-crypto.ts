@@ -1,12 +1,8 @@
 import { ed25519Keypair, x25519Keypair, x25519SharedSecret, hkdf, aesGcmEncrypt, aesGcmDecrypt, ed25519Sign, toBase64Url, fromBase64Url, u8, bytesOf } from '../lib/crypto.js'
 import { createPrivateKey, createPublicKey, generateKeyPairSync, sign as nodeSign, verify as nodeVerify, diffieHellman } from 'node:crypto'
+import { check, run } from './harness.js'
 
 async function main() {
-  let ok = true
-  const check = (name: string, cond: boolean) => {
-    console.log(name, cond ? 'OK' : 'FAIL')
-    if (!cond) ok = false
-  }
 
   // HKDF RFC5869 test case 1
   const ikm = new Uint8Array(Buffer.from('0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b', 'hex'))
@@ -60,8 +56,6 @@ async function main() {
   let tampered = false
   try { await aesGcmDecrypt(key, ct, bytesOf('wrong-header')) } catch { tampered = true }
   check('aes-gcm aad tamper rejected', tampered)
-
-  console.log(ok ? '\nALL OK' : '\nFAILURES PRESENT')
-  process.exit(ok ? 0 : 1)
 }
-main().catch((e) => { console.error(e); process.exit(1) })
+
+run(main)

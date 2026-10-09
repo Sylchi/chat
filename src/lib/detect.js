@@ -9,6 +9,7 @@ import {
   Speaker,
   Usb,
 } from '../vendor/icons.js'
+import { formatBytes } from '../dom.js'
 
 export const CATEGORY_ORDER = [
   'Compute & graphics',
@@ -34,13 +35,6 @@ export async function detectWebGPU() {
   } catch {
     return { supported: false, adapter: null, info: null }
   }
-}
-
-function formatBytes(bytes) {
-  if (!bytes) return '0 B'
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  const index = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)))
-  return `${(bytes / 1024 ** index).toFixed(index ? 1 : 0)} ${units[index]}`
 }
 
 function hexId(id) {

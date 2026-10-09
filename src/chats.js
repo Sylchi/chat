@@ -1,11 +1,17 @@
+import { atom } from './vendor/store.js'
+
 export const AGENT_CHAT = 'S agent'
+export const SAVED_CHAT = 'Saved messages'
+
+// Built-in people seeded with a generated identity on first run so every
+// listed contact is immediately addressable with an end-to-end envelope.
+export const SEED_PEOPLE = ['Maya Chen', 'Design crew', 'Jordan Blake', 'Priya Shah']
 
 const KNOWN = {
   'Maya Chen': { initials: 'MC', color: 'bg-amber-200 text-amber-900' },
   'Design crew': { initials: 'DC', color: 'bg-violet-200 text-violet-900' },
   'Jordan Blake': { initials: 'JB', color: 'bg-sky-200 text-sky-900' },
   'Priya Shah': { initials: 'PS', color: 'bg-rose-200 text-rose-900' },
-  'Saved messages': { initials: 'SM', color: 'bg-muted text-muted-foreground' },
 }
 
 const PALETTE = [
@@ -16,13 +22,14 @@ const PALETTE = [
   'bg-lime-200 text-lime-900',
 ]
 
-export const chats = [
-  { name: AGENT_CHAT, initials: 'S', color: 'bg-violet-200 text-violet-900', text: 'Running locally on this device', time: '', unread: 0, online: true, agent: true },
-  { name: 'Maya Chen', initials: 'MC', color: 'bg-amber-200 text-amber-900', text: 'The new photos are beautiful', time: '10:42', unread: 2, online: true },
-  { name: 'Design crew', initials: 'DC', color: 'bg-violet-200 text-violet-900', text: 'You: Sent the final deck', time: '09:18', unread: 0, online: false },
-  { name: 'Jordan Blake', initials: 'JB', color: 'bg-sky-200 text-sky-900', text: 'Video call · 23 min', time: 'Yesterday', unread: 0, online: false },
-  { name: 'Saved messages', initials: 'SM', color: 'bg-muted text-muted-foreground', text: 'Your private notes', time: '', unread: 0, online: false },
-]
+const PREVIEW = {
+  'Maya Chen': { text: 'The new photos are beautiful', time: '10:42', unread: 2, online: true },
+  'Design crew': { text: 'You: Sent the final deck', time: '09:18', unread: 0, online: false },
+  'Jordan Blake': { text: 'Video call · 23 min', time: 'Yesterday', unread: 0, online: false },
+}
+
+const AGENT_META = { initials: 'S', color: 'bg-violet-200 text-violet-900' }
+const SAVED_META = { initials: 'SM', color: 'bg-muted text-muted-foreground' }
 
 function initialsOf(name) {
   return name
@@ -40,9 +47,52 @@ function hashOf(name) {
 }
 
 export function chatMeta(name) {
-  const fromList = chats.find((chat) => chat.name === name)
-  if (fromList) return fromList
+  if (name === AGENT_CHAT) return { name, ...AGENT_META, online: true }
+  if (name === SAVED_CHAT) return { name, ...SAVED_META, online: false }
   const known = KNOWN[name]
-  if (known) return { name, ...known, online: false }
+  if (known) return { name, ...known, online: PREVIEW[name]?.online ?? false }
   return { name, initials: initialsOf(name), color: PALETTE[hashOf(name) % PALETTE.length], online: false }
+}
+
+function agentRow() {
+  return {
+    name: AGENT_CHAT,
+    ...chatMeta(AGENT_CHAT),
+    text: 'Running locally on this device',
+    time: '',
+    unread: 0,
+    online: true,
+    agent: true,
+  }
+}
+
+function savedRow() {
+  return { name: SAVED_CHAT, ...chatMeta(SAVED_CHAT), text: 'Your private notes', time: '', unread: 0, online: false }
+}
+
+function contactRow(contact) {
+  const preview = PREVIEW[contact.name] ?? {}
+  return {
+    name: contact.name,
+    ...chatMeta(contact.name),
+    text: preview.text ?? 'Tap to open an encrypted chat',
+    time: preview.time ?? '',
+    unread: preview.unread ?? 0,
+    online: preview.online ?? false,
+  }
+}
+
+// Reactive chat list: [S agent] + one row per contact + [Saved messages].
+// Seeded synchronously from SEED_PEOPLE to match the pre-load render, then
+// replaced by syncChats() once real contact identities are loaded.
+export const chats = atom([agentRow(), ...SEED_PEOPLE.map((name) => contactRow({ name })), savedRow()])
+
+export function syncChats(contacts = []) {
+  const rows = [agentRow()]
+  for (const contact of contacts) {
+    if (contact.name === AGENT_CHAT || contact.name === SAVED_CHAT) continue
+    rows.push(contactRow(contact))
+  }
+  rows.push(savedRow())
+  chats.set(rows)
 }

@@ -23,14 +23,9 @@ import {
   linkedDevices,
   deviceLinkWith,
 } from '../lib/keystore.js'
+import { check, eq, run } from './harness.js'
 
 async function main() {
-  let ok = true
-  const check = (name, cond) => {
-    console.log(name, cond ? 'OK' : 'FAIL')
-    if (!cond) ok = false
-  }
-  const eq = (a, b) => a.length === b.length && a.every((v, i) => v === b[i])
 
   // two independent devices
   const A = await createDevicePrincipal('phone')
@@ -126,12 +121,6 @@ async function main() {
   await ensureLocalPrincipal(storeC, 'fresh')
   const userKeys = await storeC.list('user/')
   check('device layer needs no user records', userKeys.length === 0)
-
-  console.log(ok ? '\nALL OK (device layer)' : '\nFAILURES PRESENT')
-  process.exit(ok ? 0 : 1)
 }
 
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+run(main, 'ALL OK (device layer)')

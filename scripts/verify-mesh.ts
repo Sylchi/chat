@@ -5,6 +5,8 @@ import {
   readUntilClose,
   type ByteStream,
 } from '../lib/mesh.js'
+import { concatBytes } from '../lib/crypto.js'
+import { check, run } from './harness.js'
 export {}
 
 // ---- in-memory fake mailbox tunnel, mirroring mailbox.c framing ----
@@ -15,7 +17,7 @@ function fakeMailbox(serve: (req: Uint8Array, reply: (b: Uint8Array) => void, cl
   let buf: Uint8Array = new Uint8Array(0)
   const stream: ByteStream = {
     send(b) {
-      buf = cat(buf, b)
+      buf = concatBytes(buf, b)
       process()
     },
     onData(cb) {
@@ -75,17 +77,6 @@ function serveMailbox(req: Uint8Array, reply: (b: Uint8Array) => void, close: ()
   }
 }
 
-function cat(...parts: Uint8Array[]): Uint8Array {
-  const len = parts.reduce((a, p) => a + p.length, 0)
-  const out = new Uint8Array(len)
-  let o = 0
-  for (const p of parts) {
-    out.set(p, o)
-    o += p.length
-  }
-  return out
-}
-
 // fake in-memory Transport so mailboxPut/Get go through the real seam
 const fakeTransport = {
   name: 'fake',
@@ -95,11 +86,6 @@ const fakeTransport = {
 }
 
 async function main() {
-  let ok = true
-  const check = (name: string, cond: boolean) => {
-    console.log(name, cond ? 'OK' : 'FAIL')
-    if (!cond) ok = false
-  }
 
   // pure: parseGetReply synthetic
   const m1 = new TextEncoder().encode('hello mailbox')
@@ -121,8 +107,8 @@ async function main() {
   // end-to-end over the seam + fake daemon: PUT then GET returns FIFO
   {
     spool.length = 0
-    await mailboxPut(fakeTransport, 'fake.onion', 80, cat(new Uint8Array([1, 2, 3])))
-    await mailboxPut(fakeTransport, 'fake.onion', 80, cat(new Uint8Array([4, 5, 6])))
+    await mailboxPut(fakeTransport, 'fake.onion', 80, new Uint8Array([1, 2, 3]))
+    await mailboxPut(fakeTransport, 'fake.onion', 80, new Uint8Array([4, 5, 6]))
     const got = await mailboxGet(fakeTransport, 'fake.onion', 80)
     check('fake FIFO count', got.length === 2)
     check('fake FIFO order', Buffer.from(got[1]).equals(Buffer.from([4, 5, 6])))
@@ -142,11 +128,6 @@ async function main() {
     const all = await readUntilClose(t)
     check('readUntilClose aggregates', Buffer.from(all).equals(Buffer.from('partialtail')))
   }
-
-  console.log(ok ? '\nALL OK (mesh protocol)' : '\nFAILURES PRESENT')
-  process.exit(ok ? 0 : 1)
 }
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+
+run(main, 'ALL OK (mesh protocol)')

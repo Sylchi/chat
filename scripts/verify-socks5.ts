@@ -3,6 +3,7 @@ export {}
 
 import { socks5Transport } from '../lib/transports/socks5.js'
 import * as net from 'node:net'
+import { run } from './harness.js'
 
 function startFakeProxy() {
   // the "target" the proxy pretends to reach — an echo service
@@ -63,12 +64,6 @@ function startFakeProxy() {
 }
 
 async function main() {
-  let ok = true
-  const check = (name: string, cond: boolean) => {
-    console.log(name, cond ? 'OK' : 'FAIL')
-    if (!cond) ok = false
-  }
-
   const { proxy, target, port } = await startFakeProxy()
   try {
     const tr = socks5Transport({ host: '127.0.0.1', port })
@@ -97,11 +92,6 @@ async function main() {
     proxy.close()
     target.close()
   }
-
-  console.log(ok ? '\nALL OK (socks5)' : '\nFAILURES PRESENT')
-  process.exit(ok ? 0 : 1)
 }
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+
+run(main, 'ALL OK (socks5)')

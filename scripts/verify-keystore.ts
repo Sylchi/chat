@@ -1,12 +1,8 @@
 import { hkdf, bytesOf, randomBytes } from '../lib/crypto.js'
 import { memoryStore, enrollFromPrf, unlockFromPrf, loadUserRecord } from '../lib/keystore.js'
+import { check, run } from './harness.js'
 
 async function main() {
-  let ok = true
-  const check = (name: string, cond: boolean) => {
-    console.log(name, cond ? 'OK' : 'FAIL')
-    if (!cond) ok = false
-  }
 
   const salt = new Uint8Array(32).fill(9)
   const credId =
@@ -64,11 +60,6 @@ async function main() {
   const rec = await loadUserRecord(store)
   check('user record roundtrip', rec?.credId === credId && rec?.name === 'test user')
   check('self identity roundtrip', !!rec?.self && rec.self.id === self.id)
-
-  console.log(ok ? '\nALL OK' : '\nFAILURES PRESENT')
-  process.exit(ok ? 0 : 1)
 }
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+
+run(main)

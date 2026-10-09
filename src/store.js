@@ -1,25 +1,30 @@
 import { atom } from './vendor/store.js'
+import { persist, registerEntry } from './vault.js'
 
-// Atom that mirrors its value to localStorage on every set. Corrupt or
-// unavailable storage falls back to the in-memory value without crashing.
-export function persistentAtom(key, initial) {
-  let value = initial
+// Atom whose value is sealed at rest by src/vault.js. While locked, sealed
+// blobs are left untouched and the atom holds [locked] (never plaintext).
+// Plaintext blobs from before encryption existed are loaded and re-sealed on
+// the next unlock.
+function readPlaintext(key, fallback, locked) {
   try {
     const raw = localStorage.getItem(key)
-    if (raw != null) value = JSON.parse(raw)
+    if (raw == null) return fallback
+    const parsed = JSON.parse(raw)
+    if (parsed && parsed.__s === 1) return locked
+    return parsed
   } catch {
-    value = initial
+    return fallback
   }
-  const store = atom(value)
-  const originalSet = store.set.bind(store)
+}
+
+export function persistentAtom(key, initial, locked = initial) {
+  const store = atom(readPlaintext(key, initial, locked))
+  const apply = store.set.bind(store)
   store.set = (next) => {
-    originalSet(next)
-    try {
-      localStorage.setItem(key, JSON.stringify(next))
-    } catch {
-      // storage full / unavailable — keep in-memory state
-    }
+    apply(next)
+    void persist(key, next)
   }
+  registerEntry(key, { apply, lockedValue: () => locked })
   return store
 }
 
@@ -27,13 +32,14 @@ export const activeNav = persistentAtom('s:active-nav', 'Inbox')
 export const activeChat = persistentAtom('s:active-chat', 'Maya Chen')
 export const draft = persistentAtom('s:draft', '')
 
-export const threads = persistentAtom('s:threads', {
+const SEED_THREADS = {
   'Maya Chen': [
     { from: 'them', text: 'Hey! I just finished editing the gallery from Saturday.', time: '10:36' },
     { from: 'me', text: 'Oh nice, I can’t wait to see it. The light was perfect that day.', time: '10:37' },
     { from: 'them', text: 'The new photos are beautiful', time: '10:42' },
   ],
-})
+}
+export const threads = persistentAtom('s:threads', SEED_THREADS, {})
 
 export function threadFor(chat) {
   return threads.get()[chat] ?? []
@@ -56,4 +62,4 @@ export const sharedFiles = atom([])
 export const sidebarCollapsed = persistentAtom('s:sidebar-collapsed', false)
 export const mobileSidebarOpen = atom(false)
 export const chatsDrawerOpen = atom(false)
-export const completedTasks = persistentAtom('s:tasks', [])
+export const completedTasks = persistentAtom('s:tasks', [], [])

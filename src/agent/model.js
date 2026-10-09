@@ -2,7 +2,7 @@ import { atom } from '../vendor/store.js'
 import { detectWebGPU } from '../lib/detect.js'
 
 const TRANSFORMERS_URL = 'https://cdn.jsdelivr.net/npm/@huggingface/transformers@4.3.1'
-const DEFAULT_MODEL = 'onnx-community/Qwen2.5-0.5B-Instruct'
+export const DEFAULT_MODEL = 'onnx-community/Qwen2.5-0.5B-Instruct'
 const PREF_KEY = 's:agent-model'
 const HANDLE_KEY = 'model-dir'
 const IDB_NAME = 's-agent'
@@ -39,6 +39,10 @@ export const agentModel = atom({
 })
 
 export const agentBusy = atom(false)
+
+function patch(next) {
+  agentModel.set({ ...agentModel.get(), ...next })
+}
 
 // Cooperative stop: the streamer drops chunks immediately and (when the loaded
 // transformers build supports custom stopping criteria) generation truly halts.
@@ -164,7 +168,7 @@ function useDirectoryHandle(handle) {
   return collectDirectory(handle, '', map, 0).then(() => {
     localFiles = map
     installFetchShim()
-    agentModel.set({ ...agentModel.get(), folder: handle.name, error: '' })
+    patch({ folder: handle.name, error: '' })
     return map
   })
 }
@@ -251,8 +255,7 @@ function flushProgress() {
     total += entry.total
   }
   const state = agentModel.get()
-  agentModel.set({
-    ...state,
+  patch({
     loaded,
     total,
     file: currentFile,
@@ -335,7 +338,7 @@ export async function loadModel(options = {}) {
       progress_callback: onProgress,
     })
     flushProgress()
-    agentModel.set({ ...agentModel.get(), status: 'ready', device, dtype, adapter, percent: 100, error: '' })
+    patch({ status: 'ready', device, dtype, adapter, percent: 100, error: '' })
     try {
       localStorage.setItem(CACHED_KEY, '1')
     } catch {
@@ -343,7 +346,7 @@ export async function loadModel(options = {}) {
     }
   } catch (error) {
     generator = null
-    agentModel.set({ ...agentModel.get(), status: 'error', error: friendlyError(error, device) })
+    patch({ status: 'error', error: friendlyError(error, device) })
   }
 }
 
@@ -355,7 +358,7 @@ export async function unloadModel() {
   }
   generator = null
   fileProgress.clear()
-  agentModel.set({ ...agentModel.get(), status: 'idle', percent: 0, loaded: 0, total: 0, file: '', error: '' })
+  patch({ status: 'idle', percent: 0, loaded: 0, total: 0, file: '', error: '' })
 }
 
 /* ------------------------------------------------------------------ *

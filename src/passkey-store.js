@@ -1,6 +1,7 @@
 import { atom } from './vendor/store.js'
 import { backend } from './device-store.js'
 import { enroll, loadUserRecord, unlock } from '../lib/keystore.js'
+import { lockVault, unlockVault } from './vault.js'
 
 // App-level user/passkey layer, sitting on top of the device principal.
 // The passkey's PRF output (I_U) anchors the user key; enroll() persists only
@@ -55,6 +56,7 @@ export async function enrollPasskey(displayName = 'S user') {
     if (passkey.get().enrolled) throw new Error('Already enrolled — unlock instead of creating a second root.')
     const store = await backend()
     const { session, self } = await enroll(store, displayName)
+    await unlockVault(session.localKey)
     patch({ status: 'unlocked', enrolled: true, name: displayName, session, self, error: null })
   } catch (error) {
     const enrolled = passkey.get().enrolled
@@ -72,6 +74,7 @@ export async function unlockPasskey() {
     const rec = await loadUserRecord(store)
     if (!rec) throw new Error('No passkey registered yet — create one first.')
     const session = await unlock(store)
+    await unlockVault(session.localKey)
     patch({ status: 'unlocked', enrolled: true, name: rec.name, session, self: session.self, error: null })
   } catch (error) {
     const enrolled = passkey.get().enrolled
@@ -83,5 +86,6 @@ export async function unlockPasskey() {
 /** Drop the in-memory session keys. Enrollment records stay untouched. */
 export function lockPasskey() {
   const { enrolled } = passkey.get()
+  lockVault()
   patch({ status: enrolled ? 'locked' : 'unknown', session: null, self: null, error: null })
 }

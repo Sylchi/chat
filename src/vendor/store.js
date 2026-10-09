@@ -2,8 +2,6 @@
 // Source: node_modules/nanostores/atom/index.js (atom + batch + shared queue).
 // Removed the unused `clean` symbol and the Node-only process.env guard.
 
-'../clean-stores/index.js'
-
 let listenerQueue = []
 let lqIndex = 0
 let batchSeen = null

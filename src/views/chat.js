@@ -20,13 +20,14 @@ import {
   Zap,
 } from '../vendor/icons.js'
 import { batch } from '../vendor/store.js'
-import { avatar, esc, icon } from '../dom.js'
+import { avatar, esc, formatBytes, icon } from '../dom.js'
 import { AGENT_CHAT, chatMeta } from '../chats.js'
 import { activeChat, appendMessage, draft, sharedFiles, threadFor, threads, updateMessage } from '../store.js'
 import {
   agentBusy,
   agentModel,
   agentStatusText,
+  DEFAULT_MODEL,
   generateAgentReply,
   hasCachedModel,
   loadModel,
@@ -36,8 +37,8 @@ import {
   unloadModel,
 } from '../agent/model.js'
 import { EMOJI_CATEGORIES, pushRecentEmoji, readRecentEmoji, searchEmoji, splitEntry } from '../emoji.js'
-
-const DEFAULT_MODEL = 'onnx-community/Qwen2.5-0.5B-Instruct'
+import { contactByName } from '../contacts-store.js'
+import { sealMessage } from '../messages.js'
 
 const isAgent = (name = activeChat.get()) => name === AGENT_CHAT
 
@@ -66,7 +67,7 @@ function renderMessage(message, meta) {
       <div class="max-w-[78%] rounded-2xl px-4 py-3 text-sm ${fromMe ? 'rounded-br-md bg-primary text-primary-foreground' : 'rounded-bl-md bg-muted'}">
         ${body}${action}
         <div class="mt-1.5 flex items-center justify-end gap-1 text-[10px] ${fromMe ? 'text-primary-foreground/65' : 'text-muted-foreground'}">
-          ${esc(message.time)}${fromMe ? icon(Check, 'size-3') : ''}${stats}
+          ${esc(message.time)}${message.sealed ? icon(ShieldCheck, 'size-3') : ''}${fromMe ? icon(Check, 'size-3') : ''}${stats}
         </div>
       </div>
     </div>`
@@ -272,12 +273,6 @@ async function chooseFiles() {
 
 function handleFiles(files) {
   sharedFiles.set(Array.from(files ?? []))
-}
-
-function formatBytes(bytes) {
-  if (bytes >= 1e6) return `${(bytes / 1e6).toFixed(0)} MB`
-  if (bytes >= 1e3) return `${(bytes / 1e3).toFixed(0)} KB`
-  return `${bytes} B`
 }
 
 function pillClass(status) {
@@ -589,11 +584,26 @@ export const chatView = {
         return
       }
 
+      const id = `m-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
       batch(() => {
-        appendMessage(name, { from: 'me', text, time: 'Now' })
+        appendMessage(name, { from: 'me', id, text, time: 'Now' })
         draft.set('')
         composer.value = ''
       })
+      void sealInto(name, id, text)
+    }
+
+    // Seal the outgoing text to the contact's identity and attach the envelope.
+    // The plaintext is kept locally for rendering; the envelope is the E2E
+    // artifact that would travel over a mailbox.
+    const sealInto = async (name, id, text) => {
+      const contact = contactByName(name)
+      if (!contact) return
+      try {
+        updateMessage(name, id, { sealed: await sealMessage(text, contact) })
+      } catch (error) {
+        console.error('[S] failed to seal outgoing message', error)
+      }
     }
 
     /* ---------------- listeners ---------------- */

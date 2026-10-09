@@ -134,6 +134,12 @@ const type = (el, value) => { el.value = value; input(el) }
 const { initWorkspace } = await import('../src/views/workspace.js')
 const { agentBusy, agentModel } = await import('../src/agent/model.js')
 const { AGENT_CHAT } = await import('../src/chats.js')
+const { localKeyFromPRF } = await import('../lib/identity.js')
+const { toBase64Url } = await import('../lib/crypto.js')
+const vault = await import('../src/vault.js')
+
+/* unlock the at-rest vault (no WebAuthn in this env) so persistence is sealed */
+await vault.unlockVault(await localKeyFromPRF(new Uint8Array(32).fill(1)))
 
 const app = document.getElementById('app')
 initWorkspace(app)
@@ -234,7 +240,7 @@ agentModel.set({ ...agentModel.get(), status: 'loading', total: 483000000, loade
 assert(document.querySelector('[data-model-pill]')?.textContent === 'Downloading 50%', 'pill shows download progress')
 click(document.querySelector('[data-role="model-panel"]'))
 assert(
-  document.querySelector('[data-model-progress-text]')?.textContent.includes('50% · 242 MB / 483 MB'),
+  document.querySelector('[data-model-progress-text]')?.textContent.includes('50% · 230.3 MB / 460.6 MB'),
   'progress bar text shows MB progress',
 )
 assert(document.querySelector('[data-model-progress-bar]')?.style.width === '50%', 'progress bar width bound to state')
@@ -247,6 +253,8 @@ click(document.querySelector('[data-desktop-sidebar] [data-nav-custom="agent"]')
 assert(document.getElementById('chat-title')?.textContent === 'S agent', 'sidebar button opens agent chat')
 
 /* 11. contacts view still wires into chats */
+const contactsStore = await import('../src/contacts-store.js')
+await contactsStore.initContacts()
 click(document.querySelector('[data-nav="Contacts"]'))
 const messageBtn = document.querySelector('[data-message-contact="Priya Shah"]')
 if (messageBtn) {
@@ -278,18 +286,21 @@ assert(chatDrawer.classList.contains('translate-x-0'), 'drawer opens again')
 key(document, 'Escape')
 assert(chatDrawer.classList.contains('translate-x-full'), 'escape closes chat drawer')
 
-/* 14. persistence to localStorage */
+/* 14. persistence is sealed at rest: readable in memory, ciphertext on disk */
+const sealed = (key) => {
+  const raw = localStorage.getItem(key)
+  return !!raw && JSON.parse(raw).__s === 1
+}
 store.appendMessage('Priya Shah', { from: 'me', id: 'p-t', text: 'persisted!', time: 'Now' })
-assert(
-  JSON.parse(localStorage.getItem('s:threads'))['Priya Shah']?.some((m) => m.text === 'persisted!'),
-  'threads persisted to localStorage',
-)
 store.draft.set('draft text')
-assert(JSON.parse(localStorage.getItem('s:draft')) === 'draft text', 'draft persisted to localStorage')
 store.activeChat.set('Ava Singh')
-assert(JSON.parse(localStorage.getItem('s:active-chat')) === 'Ava Singh', 'active chat persisted to localStorage')
 store.completedTasks.set([{ id: 't1' }])
-assert(JSON.parse(localStorage.getItem('s:tasks')).length === 1, 'tasks persisted to localStorage')
+await vault.settled()
+assert(store.threadFor('Priya Shah').some((m) => m.text === 'persisted!'), 'threads persisted in memory')
+assert(sealed('s:threads') && !localStorage.getItem('s:threads').includes('persisted!'), 'threads sealed at rest (no plaintext)')
+assert(sealed('s:draft') && !localStorage.getItem('s:draft').includes('draft text'), 'draft sealed at rest')
+assert(store.activeChat.get() === 'Ava Singh' && sealed('s:active-chat'), 'active chat persisted sealed')
+assert(sealed('s:tasks') && !localStorage.getItem('s:tasks').includes('t1'), 'tasks sealed at rest')
 
 /* 15. agent: stop, cached resume, generation stats */
 click(document.querySelector('[data-chat="S agent"]'))
@@ -322,6 +333,31 @@ const waitFor = async (cond, ticks = 200) => {
   for (let i = 0; i < ticks && !cond(); i++) await flush()
   return cond()
 }
+/* 15b. add a contact (mints an identity) from the Contacts view */
+click(document.querySelector('[data-nav="Contacts"]'))
+click(document.querySelector('[data-add-contact]'))
+const contactModal = document.querySelector('[data-modal="contact"]')
+assert(!contactModal.classList.contains('hidden'), 'Add contact modal opens')
+key(document, 'Escape')
+assert(contactModal.classList.contains('hidden'), 'escape closes the add-contact modal')
+click(document.querySelector('[data-add-contact]'))
+assert(!contactModal.classList.contains('hidden'), 'add-contact modal reopens')
+type(contactModal.querySelector('[data-contact-name]'), 'Sam Rivera')
+click(contactModal.querySelector('[data-contact-create]'))
+const addedSam = await waitFor(() => contactsStore.contactByName('Sam Rivera'))
+assert(!!addedSam && addedSam.userPub.length === 32, 'Add contact mints a full identity')
+assert(!!document.querySelector('[data-chat="Sam Rivera"]'), 'new contact appears in the chat list')
+
+/* 15c. outgoing messages to a contact are sealed end-to-end */
+const composer2 = document.getElementById('composer')
+const sendBtn2 = document.querySelector('[data-role="send"]')
+type(composer2, 'sealed hello')
+click(sendBtn2)
+const sent = await waitFor(() => store.threadFor('Sam Rivera').find((m) => m.text === 'sealed hello' && m.sealed))
+assert(!!sent?.sealed, 'outgoing contact message carries a sealed envelope')
+const envelope = sent ? JSON.parse(sent.sealed) : null
+assert(envelope?.v === 1 && envelope.to.user === toBase64Url(addedSam.userPub), 'envelope is addressed to the contact identity')
+
 const devStore = await import('../src/device-store.js')
 const device = await import('../lib/device.js')
 const keystore = await import('../lib/keystore.js')
@@ -443,6 +479,18 @@ assert(passkeyStore.passkey.get().status === 'locked', 'refused enrollment keeps
 click(linkModal.querySelector('[data-link-close]'))
 key(document, 'Escape')
 assert(authModal.classList.contains('hidden'), 'escape closes the passkeys modal')
+
+/* 18. lock gate tracks passkey state (WebAuthn absent in this env) */
+const { initGate } = await import('../src/views/gate.js')
+const gateEl = document.createElement('div')
+initGate(gateEl)
+await flush()
+assert(gateEl.querySelector('[data-gate-action-label]').textContent === 'Unlock with passkey', 'gate offers unlock when enrolled + locked')
+assert(gateEl.querySelector('[data-gate-title]').textContent === 'WebAuthn unavailable', 'gate warns when WebAuthn is missing')
+assert(gateEl.querySelector('[data-gate-key]').classList.contains('hidden'), 'security-key fallback hidden without WebAuthn')
+
+passkeyStore.passkey.set({ ...passkeyStore.passkey.get(), status: 'unknown', enrolled: false })
+assert(gateEl.querySelector('[data-gate-action-label]').textContent === 'Create a passkey', 'gate shows onboarding when unenrolled')
 
 console.log(failures ? `\n${failures} FAILURE(S)` : '\nall checks passed')
 process.exit(failures ? 1 : 0)

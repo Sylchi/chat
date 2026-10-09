@@ -9,7 +9,6 @@ import {
   KeyRound,
   Link2,
   ListTodo,
-  LockKeyhole,
   Menu,
   MessageCircle,
   MonitorSmartphone,
@@ -21,11 +20,11 @@ import {
   Wifi,
   X,
 } from '../vendor/icons.js'
-import { avatar, esc, icon } from '../dom.js'
+import { avatar, brandMark, esc, icon } from '../dom.js'
 import { AGENT_CHAT, chats } from '../chats.js'
 import { agentModel, agentPreviewText } from '../agent/model.js'
 import { chatView } from './chat.js'
-import { calendarView, contactsView, galleryView, tasksView, timelineView } from './panels.js'
+import { TASKS, calendarView, contactsView, galleryView, tasksView, timelineView } from './panels.js'
 import { devicesView } from './devices.js'
 import {
   activeChat,
@@ -50,15 +49,16 @@ import {
   receivePeerPayload,
 } from '../device-store.js'
 import { enrollPasskey, initPasskey, lockPasskey, passkey, unlockPasskey } from '../passkey-store.js'
+import { initContacts } from '../contacts-store.js'
 
 const PROFILE_NAME = 'Alex Rivera'
 
 const navItems = [
-  { label: 'Inbox', icon: MessageCircle, count: 3 },
+  { label: 'Inbox', icon: MessageCircle, count: chats.get().reduce((total, chat) => total + (chat.unread || 0), 0) || 0 },
   { label: 'Contacts', icon: Contact },
   { label: 'Devices', icon: MonitorSmartphone },
   { label: 'Calendar', icon: CalendarDays },
-  { label: 'Tasks', icon: ListTodo, count: 4 },
+  { label: 'Tasks', icon: ListTodo, count: TASKS.length },
   { label: 'Gallery', icon: GalleryHorizontalEnd },
   { label: 'Timeline', icon: Clock3 },
 ]
@@ -73,14 +73,8 @@ const REGIONS = {
   Timeline: timelineView,
 }
 
-async function connectDevice() {
-  try {
-    if (!('bluetooth' in navigator)) throw new Error('WebBluetooth is unavailable in this browser')
-    await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt', 'decrypt'])
-    showLink.set(true)
-  } catch {
-    showLink.set(true)
-  }
+function connectDevice() {
+  showLink.set(true)
 }
 
 function renderAuth(authModal) {
@@ -174,8 +168,8 @@ export function initWorkspace(root) {
 
         <aside data-desktop-sidebar id="sidebar" aria-label="Sidebar" class="hidden shrink-0 flex-col border-r border-sidebar-border bg-sidebar p-3 transition-[width] duration-200 md:flex">
           <div data-side-row="logo" class="mb-6 flex items-center gap-2 px-2">
-            <div class="grid size-8 place-items-center rounded-xl bg-primary text-primary-foreground">${icon(LockKeyhole)}</div>
-            <span data-side-hide class="text-[17px] font-semibold tracking-tight">S<span class="text-muted-foreground">/</span></span>
+            <div class="grid size-8 place-items-center rounded-xl bg-brand text-brand-foreground">${brandMark('size-4')}</div>
+            <span data-side-hide class="text-[17px] font-semibold tracking-tight">S</span>
           </div>
           <div data-side-row="profile" data-side-title="Alex Rivera · Personal space" class="mb-5 flex items-center gap-3 rounded-2xl border border-sidebar-border bg-card p-3 shadow-sm">
             ${avatar('AR', 'bg-cyan-200 text-cyan-900', true)}
@@ -202,7 +196,7 @@ export function initWorkspace(root) {
         <div data-mobile-overlay class="fixed inset-0 z-40 bg-foreground/25 backdrop-blur-sm md:hidden hidden"></div>
         <aside data-mobile-sidebar id="mobile-sidebar" aria-label="Navigation" inert aria-hidden="true" class="fixed inset-y-0 left-0 z-50 flex w-[min(86vw,300px)] flex-col border-r border-sidebar-border bg-sidebar p-4 shadow-2xl transition-transform duration-200 md:hidden -translate-x-full">
           <div class="mb-6 flex items-center justify-between">
-            <div class="flex items-center gap-2"><div class="grid size-8 place-items-center rounded-xl bg-primary text-primary-foreground">${icon(LockKeyhole)}</div><span class="text-[17px] font-semibold tracking-tight">S<span class="text-muted-foreground">/</span></span></div>
+            <div class="flex items-center gap-2"><div class="grid size-8 place-items-center rounded-xl bg-brand text-brand-foreground">${brandMark('size-4')}</div><span class="text-[17px] font-semibold tracking-tight">S</span></div>
             <button data-mobile-close aria-label="Close navigation" class="rounded-lg p-2 text-muted-foreground hover:bg-accent">${icon(X)}</button>
           </div>
           <nav class="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto overscroll-contain" aria-label="Main navigation">
@@ -222,20 +216,18 @@ export function initWorkspace(root) {
             </div>
             <div class="flex items-center gap-2">
               <button data-role="chats" aria-label="Open chats" aria-controls="chats-drawer" aria-expanded="false" class="flex items-center gap-2 rounded-xl border border-border bg-muted/40 px-2.5 py-2 text-xs font-medium text-muted-foreground hover:bg-accent lg:hidden">${icon(MessageCircle, 'size-3.5')}<span class="hidden sm:inline">Chats</span></button>
-              <button class="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:flex">${icon(Search, 'size-3.5')}Search <kbd class="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘ K</kbd></button>
-              <button class="relative rounded-xl p-2.5 text-muted-foreground hover:bg-accent">${icon(Bell)}<span class="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500"></span></button>
+              <button aria-label="Search" class="hidden items-center gap-2 rounded-xl border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground sm:flex">${icon(Search, 'size-3.5')}Search <kbd class="rounded border border-border bg-background px-1.5 py-0.5 text-[10px]">⌘ K</kbd></button>
+              <button aria-label="Notifications" class="relative rounded-xl p-2.5 text-muted-foreground hover:bg-accent">${icon(Bell)}<span class="absolute right-2 top-2 size-1.5 rounded-full bg-rose-500"></span></button>
               ${avatar('AR', 'bg-cyan-200 text-cyan-900', false, true)}
             </div>
           </header>
 
           <div class="flex min-h-0 flex-1">
             <div data-chat-list class="hidden w-[268px] shrink-0 flex-col border-r border-sidebar-border bg-sidebar lg:flex lg:min-h-0">
-              <div class="flex items-center justify-between px-4 py-4"><p class="text-sm font-semibold">Recent chats</p><button class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(Plus)}</button></div>
-              <div class="flex-1 overflow-y-auto px-2"><div class="flex flex-col gap-1">
-                ${chats.map(chatButton).join('')}
-              </div></div>
+              <div class="flex items-center justify-between px-4 py-4"><p class="text-sm font-semibold">Recent chats</p><button aria-label="New chat" class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(Plus)}</button></div>
+              <div class="flex-1 overflow-y-auto px-2"><div data-chat-rows class="flex flex-col gap-1"></div></div>
               <div class="mx-4 mt-8 shrink-0 rounded-2xl border border-border bg-muted/40 p-3">
-                <div class="mb-2 flex items-center gap-2 text-xs font-medium">${icon(Wifi, 'size-3.5 text-emerald-600')}&#160;2 devices synced</div>
+                <div class="mb-2 flex items-center gap-2 text-xs font-medium">${icon(Wifi, 'size-3.5 text-emerald-600')}&#160;<span data-device-count>2 devices synced</span></div>
                 <p class="text-[11px] leading-relaxed text-muted-foreground">Your messages, files and calls stay yours. No passwords. No third-party account.</p>
                 <button data-nav-custom="devices" class="mt-3 text-[11px] font-medium text-foreground underline underline-offset-4">Manage devices</button>
               </div>
@@ -253,11 +245,9 @@ export function initWorkspace(root) {
           <p class="text-sm font-semibold">Recent chats</p>
           <button data-chat-close aria-label="Close chats" class="rounded-lg p-1.5 text-muted-foreground hover:bg-accent">${icon(X)}</button>
         </div>
-        <div class="flex-1 overflow-y-auto"><div class="flex flex-col gap-1">
-          ${chats.map(chatButton).join('')}
-        </div></div>
+        <div class="flex-1 overflow-y-auto"><div data-chat-rows class="flex flex-col gap-1"></div></div>
         <button data-nav-custom="devices" class="mt-4 rounded-xl border border-border bg-muted/40 p-3 text-left text-[11px] text-muted-foreground hover:bg-accent">
-          <span class="flex items-center gap-2 text-xs font-medium text-foreground">${icon(Wifi, 'size-3.5 text-emerald-600')}2 devices synced</span>
+          <span class="flex items-center gap-2 text-xs font-medium text-foreground">${icon(Wifi, 'size-3.5 text-emerald-600')}<span data-device-count>2 devices synced</span></span>
           <span class="mt-1 block">Your messages, files and calls stay yours.</span>
         </button>
       </aside>
@@ -347,6 +337,25 @@ export function initWorkspace(root) {
     }
   }
 
+  function renderChatRows() {
+    const html = chats.get().map(chatButton).join('')
+    for (const rows of root.querySelectorAll('[data-chat-rows]')) rows.innerHTML = html
+  }
+
+  function syncInboxBadge() {
+    const total = chats.get().reduce((sum, chat) => sum + (chat.unread || 0), 0)
+    for (const badge of root.querySelectorAll('[data-nav="Inbox"] [data-nav-count]')) {
+      badge.textContent = String(total)
+      badge.classList.toggle('hidden', total === 0)
+    }
+  }
+
+  function syncDeviceCount() {
+    const total = 1 + linked.get().length
+    const text = `${total} device${total === 1 ? '' : 's'} synced`
+    for (const node of root.querySelectorAll('[data-device-count]')) node.textContent = text
+  }
+
   // Off-canvas drawers stay inert while closed so their controls are never
   // tabbable, and focus moves in on open / back to the trigger on close.
   let mobileWasOpen = false
@@ -412,7 +421,7 @@ export function initWorkspace(root) {
     if (button.dataset.navCustom === 'agent') openAgentChat()
     else if (button.dataset.navCustom === 'devices') activeNav.set('Devices')
     else if (button.dataset.navCustom === 'auth') showAuth.set(true)
-    else if (button.dataset.navCustom === 'link') void connectDevice()
+    else if (button.dataset.navCustom === 'link') connectDevice()
   })
 
   mobileNav.addEventListener('click', (event) => {
@@ -424,7 +433,7 @@ export function initWorkspace(root) {
     else if (custom === 'agent') openAgentChat()
     else if (custom === 'devices') activeNav.set('Devices')
     else if (custom === 'auth') showAuth.set(true)
-    else if (custom === 'link') void connectDevice()
+    else if (custom === 'link') connectDevice()
   })
 
   mobileOverlay.addEventListener('click', () => mobileSidebarOpen.set(false))
@@ -480,7 +489,7 @@ export function initWorkspace(root) {
   function linkDeviceCard(device) {
     return `<div class="flex items-center gap-3 rounded-2xl border border-border bg-muted/40 p-3">
       ${icon(MonitorSmartphone, 'size-4 text-primary')}
-      <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">${esc(device.name) ?? 'S device'}</p><p class="truncate font-mono text-[10px] text-muted-foreground">${esc(device.id)}</p></div>
+      <div class="min-w-0 flex-1"><p class="truncate text-sm font-medium">${esc(device.name) || 'S device'}</p><p class="truncate font-mono text-[10px] text-muted-foreground">${esc(device.id)}</p></div>
       ${device.fingerprint ? `<span class="rounded-md bg-background px-2 py-1 font-mono text-[10px] text-muted-foreground">${esc(device.fingerprint)}</span>` : ''}
     </div>`
   }
@@ -546,12 +555,13 @@ export function initWorkspace(root) {
       void submitPeerPayload()
     }
   })
-  showLink.subscribe((visible) => {
-    linkModal.classList.toggle('hidden', !visible)
-    if (visible) void renderLinkBody()
+  linked.subscribe(() => {
+    renderLinkBody()
+    syncDeviceCount()
   })
-  linked.subscribe(() => renderLinkBody())
-  void initDevices().then(renderLinkBody)
+  void initDevices()
+    .then(renderLinkBody)
+    .catch((error) => console.error('[S] device layer failed to initialize', error))
 
   window.addEventListener('keydown', (event) => {
     const key = typeof event.key === 'string' ? event.key.toLowerCase() : ''
@@ -578,7 +588,10 @@ export function initWorkspace(root) {
     const text = agentPreviewText(state)
     for (const node of root.querySelectorAll('[data-agent-preview]')) node.textContent = text
   })
-  showLink.subscribe((visible) => linkModal.classList.toggle('hidden', !visible))
+  showLink.subscribe((visible) => {
+    linkModal.classList.toggle('hidden', !visible)
+    if (visible) void renderLinkBody()
+  })
   showAuth.subscribe((visible) => {
     authModal.classList.toggle('hidden', !visible)
     if (visible) renderAuth(authModal)
@@ -586,6 +599,12 @@ export function initWorkspace(root) {
   passkey.subscribe(() => {
     if (!authModal.classList.contains('hidden')) renderAuth(authModal)
   })
+  chats.subscribe(() => {
+    renderChatRows()
+    syncChatList()
+    syncInboxBadge()
+  })
+  void initContacts().catch((error) => console.error('[S] contacts failed to initialize', error))
   activeChat.subscribe(syncChatList)
   // subscribe() fires immediately, so this is also the initial render.
   activeNav.subscribe(() => {

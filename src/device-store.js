@@ -57,13 +57,6 @@ export async function currentPeerPayload() {
   return JSON.stringify(peerPayload(principal))
 }
 
-export async function startPairing() {
-  pairState.set('code')
-  pairCode.set(null)
-  pairFingerprint.set(null)
-  pairError.set(null)
-}
-
 export async function pairViaBluetooth() {
   pairState.set('code')
   pairError.set(null)

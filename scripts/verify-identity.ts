@@ -1,22 +1,9 @@
-import {
-  createDevice,
-  appKeysFromPRF,
-  userKeysFromPRF,
-  unwrapDevice,
-  sealTo,
-  openSealed,
-  hkdf,
-  sha256,
-  bytesOf,
-} from '../lib/identity.js'
+import { appKeysFromPRF, userKeysFromPRF, sealTo, openSealed, DEV_WRAP_INFO } from '../lib/identity.js'
+import { createDevicePrincipal, wrapDeviceSeed, unwrapDeviceSeed } from '../lib/device.js'
+import { hkdf, bytesOf } from '../lib/crypto.js'
+import { check, eq, run } from './harness.js'
 
 async function main() {
-  let ok = true
-  const check = (name: string, cond: boolean) => {
-    console.log(name, cond ? 'OK' : 'FAIL')
-    if (!cond) ok = false
-  }
-
   // simulate the passkey PRF output (deterministic per user+salt)
   const salt = new Uint8Array(32).fill(5)
   const prf = await hkdf(bytesOf('fake-passkey-secret'), salt, bytesOf('prf'), 32)
@@ -24,24 +11,27 @@ async function main() {
   // Re-derivation is deterministic: same prf -> same user/app keys
   const u1 = await userKeysFromPRF(prf)
   const u2 = await userKeysFromPRF(prf)
-  check('user keys deterministic', Buffer.from(u1.dec.pub).equals(Buffer.from(u2.dec.pub)))
-  check('user verify vector deterministic', Buffer.from(u1.verify).equals(Buffer.from(u2.verify)))
+  check('user keys deterministic', eq(u1.dec.pub, u2.dec.pub))
+  check('user verify vector deterministic', eq(u1.verify, u2.verify))
 
   const a1 = await appKeysFromPRF(prf)
   const a2 = await appKeysFromPRF(prf)
-  check('app keys deterministic across devices', Buffer.from(a1.enc.pub).equals(Buffer.from(a2.enc.pub)))
-  check('app sig seed deterministic', Buffer.from(a1.sigSeed).equals(Buffer.from(a2.sigSeed)))
+  check('app keys deterministic across devices', eq(a1.enc.pub, a2.enc.pub))
+  check('app sig seed deterministic', eq(a1.sigSeed, a2.sigSeed))
 
-  // device principal: wrapped under user-derived key
-  const dev = await createDevice(prf)
-  const unwrapped = await unwrapDevice(dev.wrapped, prf)
-  check('device unwrap restores priv', Buffer.from(unwrapped).equals(Buffer.from(dev.priv)))
+  // device principal: seed wrapped under a user-derived key
+  const wrapKey = await hkdf(prf, null, bytesOf(DEV_WRAP_INFO), 32)
+  const dev = await createDevicePrincipal('test device')
+  const wrapped = await wrapDeviceSeed(wrapKey, dev.id, dev.seed)
+  const seedBack = await unwrapDeviceSeed(wrapKey, dev.id, wrapped)
+  check('device unwrap restores seed', eq(seedBack, dev.seed))
 
   // without correct user presence, unwrap fails
   const wrongPrf = await hkdf(bytesOf('other-user-secret'), salt, bytesOf('prf'), 32)
+  const wrongWrapKey = await hkdf(wrongPrf, null, bytesOf(DEV_WRAP_INFO), 32)
   let failed = false
   try {
-    await unwrapDevice(dev.wrapped, wrongPrf)
+    await unwrapDeviceSeed(wrongWrapKey, dev.id, wrapped)
   } catch {
     failed = true
   }
@@ -51,7 +41,7 @@ async function main() {
   const recSubject = await hkdf(bytesOf('contact-secret'), salt, bytesOf('prf'), 32)
   const recUser = await userKeysFromPRF(recSubject)
   const recApp = await appKeysFromPRF(recSubject)
-  const recDev = await createDevice(recSubject)
+  const recDev = await createDevicePrincipal('contact device')
 
   // seal + open at intended recipient
   const msg = bytesOf('message content, sealed to the user')
@@ -66,10 +56,10 @@ async function main() {
     appPriv: recApp.enc.priv,
     devicePriv: recDev.priv,
   })
-  check('seal/open roundtrip', Buffer.from(opened).equals(Buffer.from(msg)))
+  check('seal/open roundtrip', eq(opened, msg))
 
   // sender device CANNOT open (only recipient device key works)
-  const attackerDev = await createDevice(await hkdf(bytesOf('attacker'), salt, bytesOf('prf'), 32))
+  const attackerDev = await createDevicePrincipal('attacker device')
   let attackerFailed = false
   try {
     await openSealed(env, {
@@ -107,11 +97,6 @@ async function main() {
     noDevFailed = true
   }
   check('user+app without recipient device cannot open', noDevFailed)
-
-  console.log(ok ? '\nALL OK' : '\nFAILURES PRESENT')
-  process.exit(ok ? 0 : 1)
 }
-main().catch((e) => {
-  console.error(e)
-  process.exit(1)
-})
+
+run(main)
