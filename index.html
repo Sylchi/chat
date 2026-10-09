@@ -39,7 +39,234 @@
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32x32.png" />
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16x16.png" />
     <link rel="apple-touch-icon" href="apple-icon.png" />
-    <link rel="stylesheet" href="./styles.css" />
+    <!--
+      Tailwind is loaded straight from the CDN and compiled in the browser, so
+      this whole build is a pile of static files with no toolchain and no
+      dependencies. The block below is the app's Tailwind config: custom theme
+      tokens, the class-driven dark variant, and a couple of hand-written rules.
+    -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4.3.3"></script>
+    <style type="text/tailwindcss">
+      /* Dark mode is class-driven so the user can pick System / Light / Dark
+         (src/theme.js toggles .dark on <html>). */
+      @custom-variant dark (&:where(.dark, .dark *));
+
+      @theme {
+        --font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+        --font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+      }
+
+      @theme inline {
+        --color-sidebar-ring: var(--sidebar-ring);
+        --color-sidebar-border: var(--sidebar-border);
+        --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+        --color-sidebar-accent: var(--sidebar-accent);
+        --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+        --color-sidebar-primary: var(--sidebar-primary);
+        --color-sidebar-foreground: var(--sidebar-foreground);
+        --color-sidebar: var(--sidebar);
+        --color-chart-5: var(--chart-5);
+        --color-chart-4: var(--chart-4);
+        --color-chart-3: var(--chart-3);
+        --color-chart-2: var(--chart-2);
+        --color-chart-1: var(--chart-1);
+        --color-ring: var(--ring);
+        --color-input: var(--input);
+        --color-border: var(--border);
+        --color-destructive: var(--destructive);
+        --color-accent-foreground: var(--accent-foreground);
+        --color-accent: var(--accent);
+        --color-muted-foreground: var(--muted-foreground);
+        --color-muted: var(--muted);
+        --color-secondary-foreground: var(--secondary-foreground);
+        --color-secondary: var(--secondary);
+        --color-primary-foreground: var(--primary-foreground);
+        --color-primary: var(--primary);
+        --color-brand-foreground: var(--brand-foreground);
+        --color-brand: var(--brand);
+        --color-popover-foreground: var(--popover-foreground);
+        --color-popover: var(--popover);
+        --color-card-foreground: var(--card-foreground);
+        --color-card: var(--card);
+        --color-foreground: var(--foreground);
+        --color-background: var(--background);
+        --radius-sm: calc(var(--radius) * 0.6);
+        --radius-md: calc(var(--radius) * 0.8);
+        --radius-lg: var(--radius);
+        --radius-xl: calc(var(--radius) * 1.4);
+        --radius-2xl: calc(var(--radius) * 1.8);
+        --radius-3xl: calc(var(--radius) * 2.2);
+        --radius-4xl: calc(var(--radius) * 2.6);
+      }
+
+      :root {
+        color-scheme: light;
+        --background: oklch(1 0 0);
+        --foreground: oklch(0.145 0 0);
+        --card: oklch(1 0 0);
+        --card-foreground: oklch(0.145 0 0);
+        --popover: oklch(1 0 0);
+        --popover-foreground: oklch(0.145 0 0);
+        --primary: oklch(0.205 0 0);
+        --primary-foreground: oklch(0.985 0 0);
+        --secondary: oklch(0.97 0 0);
+        --secondary-foreground: oklch(0.205 0 0);
+        --muted: oklch(0.97 0 0);
+        --muted-foreground: oklch(0.556 0 0);
+        --accent: oklch(0.97 0 0);
+        --accent-foreground: oklch(0.205 0 0);
+        --destructive: oklch(0.577 0.245 27.325);
+        --border: oklch(0.922 0 0);
+        --input: oklch(0.922 0 0);
+        --ring: oklch(0.708 0 0);
+        --brand: oklch(0.51 0.23 264);
+        --brand-foreground: oklch(1 0.01 264);
+        --chart-1: oklch(0.87 0 0);
+        --chart-2: oklch(0.556 0 0);
+        --chart-3: oklch(0.439 0 0);
+        --chart-4: oklch(0.371 0 0);
+        --chart-5: oklch(0.269 0 0);
+        --radius: 0.625rem;
+        --sidebar: oklch(0.985 0 0);
+        --sidebar-foreground: oklch(0.145 0 0);
+        --sidebar-primary: oklch(0.51 0.23 264);
+        --sidebar-primary-foreground: oklch(1 0.01 264);
+        --sidebar-accent: oklch(0.97 0 0);
+        --sidebar-accent-foreground: oklch(0.205 0 0);
+        --sidebar-border: oklch(0.922 0 0);
+        --sidebar-ring: oklch(0.708 0 0);
+      }
+
+      .dark {
+        color-scheme: dark;
+        --background: oklch(0.145 0 0);
+        --foreground: oklch(0.985 0 0);
+        --card: oklch(0.205 0 0);
+        --card-foreground: oklch(0.985 0 0);
+        --popover: oklch(0.205 0 0);
+        --popover-foreground: oklch(0.985 0 0);
+        --primary: oklch(0.922 0 0);
+        --primary-foreground: oklch(0.205 0 0);
+        --secondary: oklch(0.269 0 0);
+        --secondary-foreground: oklch(0.985 0 0);
+        --muted: oklch(0.269 0 0);
+        --muted-foreground: oklch(0.708 0 0);
+        --accent: oklch(0.269 0 0);
+        --accent-foreground: oklch(0.985 0 0);
+        --destructive: oklch(0.704 0.191 22.216);
+        --border: oklch(1 0 0 / 10%);
+        --input: oklch(1 0 0 / 15%);
+        --ring: oklch(0.556 0 0);
+        --brand: oklch(0.7 0.17 264);
+        --brand-foreground: oklch(0.2 0.04 264);
+        --chart-1: oklch(0.87 0 0);
+        --chart-2: oklch(0.556 0 0);
+        --chart-3: oklch(0.439 0 0);
+        --chart-4: oklch(0.371 0 0);
+        --chart-5: oklch(0.269 0 0);
+        --sidebar: oklch(0.225 0 0);
+        --sidebar-foreground: oklch(0.985 0 0);
+        --sidebar-primary: oklch(0.488 0.243 264.376);
+        --sidebar-primary-foreground: oklch(0.985 0 0);
+        --sidebar-accent: oklch(0.269 0 0);
+        --sidebar-accent-foreground: oklch(0.985 0 0);
+        --sidebar-border: oklch(1 0 0 / 10%);
+        --sidebar-ring: oklch(0.556 0 0);
+      }
+
+      /* Sidebar geometry is driven by a single state attribute ([data-collapsed])
+         instead of JS toggling utility strings. These rules live outside @layer
+         so they win over Tailwind's utilities layer. */
+      [data-desktop-sidebar] {
+        width: 236px;
+      }
+      [data-desktop-sidebar][data-collapsed] {
+        width: 72px;
+      }
+      [data-desktop-sidebar][data-collapsed] [data-side-hide] {
+        display: none;
+      }
+      [data-desktop-sidebar][data-collapsed] [data-side-row] {
+        justify-content: center;
+      }
+      [data-desktop-sidebar][data-collapsed] [data-nav] {
+        position: relative;
+      }
+      /* Unread counts become dots on the collapsed rail. */
+      [data-desktop-sidebar][data-collapsed] [data-nav-count] {
+        position: absolute;
+        top: 4px;
+        right: 6px;
+        display: grid;
+        place-items: center;
+        width: 7px;
+        height: 7px;
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        font-size: 0;
+        line-height: 0;
+        color: transparent;
+        background: var(--primary);
+      }
+      [data-desktop-sidebar][data-collapsed] [data-nav][aria-current="page"] [data-nav-count] {
+        background: var(--primary-foreground);
+      }
+
+      @layer base {
+        * {
+          @apply border-border outline-ring/50;
+          scrollbar-width: thin;
+          scrollbar-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent) transparent;
+        }
+        ::-webkit-scrollbar {
+          width: 8px;
+          height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+          background: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+          border-radius: 999px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+          background: color-mix(in oklch, var(--muted-foreground) 65%, transparent);
+        }
+        body {
+          @apply bg-background text-foreground antialiased;
+          font-family: var(--font-sans);
+          text-rendering: optimizeLegibility;
+          height: 100dvh;
+          overflow: hidden;
+          overscroll-behavior: none;
+        }
+      }
+
+      /* Inline help popovers fade in. Only opacity is animated so the anchored
+         translate utilities that position the bubble are never clobbered. */
+      [data-help-panel] {
+        animation: s-pop 140ms ease-out;
+      }
+      @keyframes s-pop {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 1;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *,
+        *::before,
+        *::after {
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+          transition-duration: 0.01ms !important;
+        }
+      }
+    </style>
     <script>
       // Apply the saved appearance before first paint to avoid a flash.
       try {
