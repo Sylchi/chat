@@ -13,32 +13,38 @@ function directRequest() {
   return direct
 }
 
-function endpoint(kind) {
-  const relay = githubRelay().replace(/\/+$/, '')
-  const base = relay || 'https://github.com'
-  return kind === 'code' ? `${base}/login/device/code` : `${base}/login/oauth/access_token`
+function endpoint(relay, kind) {
+  const path = kind === 'code' ? '/login/device/code' : '/login/oauth/access_token'
+  return relay ? `${relay}${path}` : `https://github.com${path}`
 }
 
 async function post(kind, form) {
   const init = {
     method: 'POST',
-    headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'S' },
+    headers: { Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams(form).toString(),
   }
-  const url = endpoint(kind)
-  let response
-  if (githubRelay()) {
-    response = await fetch(url, init)
-  } else {
+  const relay = githubRelay().replace(/\/+$/, '')
+  const attempts = []
+  if (relay) attempts.push(() => fetch(endpoint(relay, kind), init))
+  attempts.push(() => directRequest()(endpoint('', kind), init))
+
+  let lastError
+  for (const attempt of attempts) {
     try {
-      response = await directRequest()(url, init)
+      const response = await attempt()
+      const data = await response.json().catch(() => null)
+      if (data) return data
+      lastError = new Error(`GitHub OAuth request failed (${response.status})`)
     } catch (error) {
-      throw new Error(`GitHub sign-in needs the service-worker network transport (or set a relay URL): ${error.message}`)
+      lastError = error
     }
   }
-  const data = await response.json().catch(() => null)
-  if (!data) throw new Error(`GitHub OAuth request failed (${response.status})`)
-  return data
+  throw new Error(
+    relay
+      ? `GitHub sign-in failed (${lastError?.message}). Is the loopback proxy at ${relay} running?`
+      : `GitHub sign-in needs the service-worker Direct Sockets transport, which this context denies (${lastError?.message}). Run the loopback proxy and set window.S_GITHUB_RELAY.`,
+  )
 }
 
 export async function startDeviceFlow(clientId, scope = 'repo read:user') {

@@ -4,5 +4,5 @@
 window.S_GITHUB_CLIENT_ID = 'Ov23liqAaieXqBJFU4HV'
 // Optional: point these at a relay/proxy if you don't want the request to go
 // through the service-worker Direct Sockets transport.
-window.S_GITHUB_RELAY = window.S_GITHUB_RELAY || ''
+window.S_GITHUB_RELAY = window.S_GITHUB_RELAY || 'http://127.0.0.1:8737'
 window.S_GOOGLE_CLIENT_ID = window.S_GOOGLE_CLIENT_ID || ''

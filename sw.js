@@ -14,6 +14,15 @@ self.addEventListener('message', async (e) => {
   const port = e.ports && e.ports[0]
   
   if (data.type === 'open') {
+    if (typeof TCPSocket === 'undefined') {
+      port?.postMessage({
+        type: 'error',
+        requestId: data.requestId,
+        error:
+          'Direct Sockets (TCPSocket) is not available in this context. It requires an Isolated Web App or a Permissions-Policy: direct-sockets header, which GitHub Pages does not send.',
+      })
+      return
+    }
     try {
       const socket = new TCPSocket(data.host, data.port, { useSecureTransport: !!data.secure })
       await socket.opened
