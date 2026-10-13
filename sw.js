@@ -15,7 +15,7 @@ self.addEventListener('message', async (e) => {
   
   if (data.type === 'open') {
     try {
-      const socket = new TCPSocket(data.host, data.port, { useSecureTransport: false })
+      const socket = new TCPSocket(data.host, data.port, { useSecureTransport: !!data.secure })
       await socket.opened
       sockets.set(data.requestId, { socket, port })
       port.postMessage({ type: 'opened', requestId: data.requestId })

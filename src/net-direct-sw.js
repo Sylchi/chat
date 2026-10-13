@@ -14,7 +14,7 @@ export function directSwTransport() {
 
   return {
     name: 'direct-socket-sw',
-    async connect(host, port) {
+    async connect(host, port, opts = {}) {
       await init()
       const id = ++requestId
       const { port: msgPort, closeCbs, dataCbs, opened } = await new Promise((resolve, reject) => {
@@ -46,7 +46,7 @@ export function directSwTransport() {
         }
         const swReg = navigator.serviceWorker.controller || sw.active
         if (!swReg) return reject(new Error('no controller'))
-        swReg.postMessage({ type: 'open', requestId: id, host, port }, [channel.port2])
+        swReg.postMessage({ type: 'open', requestId: id, host, port, secure: opts.secure }, [channel.port2])
       })
 
       return {

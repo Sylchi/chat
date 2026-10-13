@@ -2,6 +2,7 @@ import {
   CalendarDays,
   Check,
   Clock3,
+  Code,
   Contact,
   Fingerprint,
   FolderOpen,
@@ -28,6 +29,7 @@ import { chatView } from './chat.js'
 import { calendarView, contactsView, galleryView, openTaskCount, settingsView, taskList, tasksView, timelineView } from './panels.js'
 import { devicesView } from './devices.js'
 import { filesView } from './files.js'
+import { studioView } from './studio.js'
 import {
   activeChat,
   activeNav,
@@ -70,6 +72,7 @@ const navItems = [
   { label: 'Tasks', icon: ListTodo, count: 0 },
   { label: 'Gallery', icon: GalleryHorizontalEnd },
   { label: 'Files', icon: FolderOpen },
+  { label: 'Studio', icon: Code },
   { label: 'Timeline', icon: Clock3 },
   { label: 'Devices', icon: MonitorSmartphone },
   { label: 'Settings', icon: Settings2 },
@@ -86,6 +89,7 @@ const REGIONS = {
   Tasks: tasksView,
   Gallery: galleryView,
   Files: filesView,
+  Studio: studioView,
   Timeline: timelineView,
   Settings: settingsView,
 }
