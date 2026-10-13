@@ -5,10 +5,10 @@ import { persistentAtom } from '../store.js'
 
 const DEFAULT = {
   gdrive: { clientId: '' },
-  github: { token: '', owner: '', repo: '', branch: 'main' },
+  github: { token: '', clientId: '', relay: '', owner: '', repo: '', branch: 'main' },
 }
 
-export const filesConfig = persistentAtom('s:files-config', DEFAULT, { gdrive: { clientId: '' }, github: { token: '', owner: '', repo: '', branch: 'main' } })
+export const filesConfig = persistentAtom('s:files-config', DEFAULT, { gdrive: { clientId: '' }, github: { token: '', clientId: '', relay: '', owner: '', repo: '', branch: 'main' } })
 
 export const filesPrefs = persistentAtom('s:files-prefs', { provider: 'idb' }, { provider: 'idb' })
 
@@ -25,5 +25,24 @@ export function googleClientId() {
 
 export function githubConfig() {
   const cfg = filesConfig.get()?.github ?? {}
-  return { token: cfg.token || '', owner: cfg.owner || '', repo: cfg.repo || '', branch: cfg.branch || 'main' }
+  return {
+    token: cfg.token || '',
+    clientId: cfg.clientId || '',
+    relay: cfg.relay || '',
+    owner: cfg.owner || '',
+    repo: cfg.repo || '',
+    branch: cfg.branch || 'main',
+  }
+}
+
+export function githubClientId() {
+  const stored = filesConfig.get()?.github?.clientId
+  if (stored) return stored
+  return typeof window !== 'undefined' ? window.S_GITHUB_CLIENT_ID || '' : ''
+}
+
+export function githubRelay() {
+  const stored = filesConfig.get()?.github?.relay
+  if (stored) return stored
+  return typeof window !== 'undefined' ? window.S_GITHUB_RELAY || '' : ''
 }

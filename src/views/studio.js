@@ -2,7 +2,9 @@ import { Code, FileText, GitBranch, LockKeyhole, Plus, RefreshCw, Save, Search, 
 import { esc, icon } from '../dom.js'
 import { showAuth } from '../store.js'
 import { passkey } from '../passkey-store.js'
-import { githubConfig, updateConfig } from '../files/config.js'
+import { githubClientId, githubConfig, updateConfig } from '../files/config.js'
+import { getUser, listBranches, listRepos } from '../github/api.js'
+import { pollDeviceToken, startDeviceFlow } from '../github/oauth.js'
 import { diffStats, lineDiff } from '../diff.js'
 import {
   changeCount,
@@ -28,6 +30,18 @@ import {
 // kept in IndexedDB (sealed with the vault key) and published straight to a git
 // repository through the GitHub API; the repository is the source of truth.
 
+const oauth = {
+  status: 'idle',
+  userCode: '',
+  verificationUri: 'https://github.com/login/device',
+  error: '',
+  login: '',
+  repos: [],
+  branches: [],
+  loading: false,
+  controller: null,
+}
+
 function field(label, value, key, { type = 'text', placeholder = '' } = {}) {
   return `<label class="flex flex-col gap-1 text-[11px] font-medium text-muted-foreground">${esc(label)}
     <input data-studio-field="${esc(key)}" type="${type}" value="${esc(value ?? '')}" placeholder="${esc(placeholder)}" autocomplete="off" spellcheck="false" class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring/20" />
@@ -36,15 +50,61 @@ function field(label, value, key, { type = 'text', placeholder = '' } = {}) {
 
 function configPanel(state) {
   const cfg = githubConfig()
+  const clientId = githubClientId()
   const error = state.error ? `<p class="rounded-lg bg-rose-500/10 px-3 py-2 text-[11px] text-rose-600">${esc(state.error)}</p>` : ''
+  const oauthError = oauth.error ? `<p class="rounded-lg bg-rose-500/10 px-3 py-2 text-[11px] text-rose-600">${esc(oauth.error)}</p>` : ''
+
+  let connect
+  if (oauth.status === 'pending') {
+    connect = `<div class="rounded-xl border border-border bg-muted/40 p-3">
+      <p class="text-[11px] text-muted-foreground">Open GitHub and enter this code to authorize this device:</p>
+      <p class="mt-1 font-mono text-xl font-semibold tracking-[0.25em] text-foreground">${esc(oauth.userCode || '\u00b7\u00b7\u00b7\u00b7-\u00b7\u00b7\u00b7\u00b7')}</p>
+      <a href="${esc(oauth.verificationUri)}" target="_blank" rel="noreferrer" class="mt-1 inline-block text-[11px] text-primary underline underline-offset-4">${esc(oauth.verificationUri)}</a>
+      <p class="mt-2 text-[11px] text-muted-foreground">Waiting for approval\u2026</p>
+      <button data-studio-github-cancel class="mt-2 rounded-lg border border-border px-2.5 py-1.5 text-[11px] font-medium hover:bg-accent">Cancel</button>
+    </div>`
+  } else if (oauth.loading) {
+    connect = '<p class="text-[11px] text-muted-foreground">Loading your repositories\u2026</p>'
+  } else if (oauth.login) {
+    connect = `<div class="flex items-center justify-between gap-2 text-[11px]">
+      <span class="text-muted-foreground">Signed in as <span class="font-medium text-foreground">${esc(oauth.login)}</span></span>
+      <button data-studio-github-disconnect class="rounded-lg border border-border px-2.5 py-1.5 font-medium hover:bg-accent">Disconnect</button>
+    </div>`
+  } else {
+    connect = `<button data-studio-github-connect class="flex items-center justify-center gap-1.5 rounded-xl bg-primary px-3 py-2 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50" ${clientId ? '' : 'disabled'}>${icon(GitBranch, 'size-3.5')}Connect with GitHub</button>
+      ${clientId ? '' : '<p class="text-[11px] text-muted-foreground">No OAuth client id found. Set the <span class="font-mono">GITHUB_CLIENT_ID</span> Pages variable (injected as <span class="font-mono">window.S_GITHUB_CLIENT_ID</span>), or paste a token below.</p>'}`
+  }
+
+  const branchOptions = oauth.branches.length ? oauth.branches : [cfg.branch || 'main']
+  const pickers = oauth.repos.length
+    ? `<div class="grid gap-2 sm:grid-cols-2">
+        <label class="flex flex-col gap-1 text-[11px] font-medium text-muted-foreground">Repository
+          <select data-studio-repo class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring/20">
+            <option value="">Select a repository\u2026</option>
+            ${oauth.repos.map((r) => `<option value="${esc(r.full)}" ${r.full === `${cfg.owner}/${cfg.repo}` ? 'selected' : ''}>${esc(r.full)}</option>`).join('')}
+          </select>
+        </label>
+        <label class="flex flex-col gap-1 text-[11px] font-medium text-muted-foreground">Branch
+          <select data-studio-branch class="rounded-lg border border-border bg-background px-2.5 py-1.5 text-xs text-foreground outline-none focus:ring-2 focus:ring-ring/20">
+            ${branchOptions.map((b) => `<option value="${esc(b)}" ${b === cfg.branch ? 'selected' : ''}>${esc(b)}</option>`).join('')}
+          </select>
+        </label>
+      </div>`
+    : ''
+
   return `<div class="m-auto flex w-full max-w-md flex-col gap-3 rounded-2xl border border-border bg-card p-5">
     <div class="flex items-center gap-2">${icon(GitBranch, 'size-4 text-primary')}<p class="text-sm font-semibold">Connect a repository</p></div>
-    <p class="text-xs text-muted-foreground">Publishing commits to this repository through api.github.com. On GitHub Pages, a commit updates the live site. The token is stored sealed in your vault.</p>
+    <p class="text-xs text-muted-foreground">Commits go to GitHub through the API; on GitHub Pages a commit updates the live site. Sign in with GitHub (device flow \u2014 no secret, the token stays sealed in your vault), or paste a token.</p>
+    ${connect}
+    ${oauthError}
+    ${pickers}
     <div class="grid gap-2 sm:grid-cols-2">
       ${field('Owner', cfg.owner, 'owner', { placeholder: 'octocat' })}
       ${field('Repository', cfg.repo, 'repo', { placeholder: 'website' })}
       ${field('Branch', cfg.branch, 'branch', { placeholder: 'main' })}
       ${field('Token', cfg.token, 'token', { type: 'password' })}
+      ${field('Client ID', cfg.clientId, 'clientId', { placeholder: 'Ov23li\u2026' })}
+      ${field('Relay URL (optional)', cfg.relay, 'relay', { placeholder: 'https://\u2026' })}
     </div>
     ${error}
     <div class="flex gap-2">
@@ -303,6 +363,13 @@ export const studioView = {
         deploy.loading,
         deploy.error,
         deploy.run?.id,
+        oauth.status,
+        oauth.loading,
+        oauth.login,
+        oauth.userCode,
+        oauth.error,
+        oauth.repos.length,
+        oauth.branches.length,
       ].join('|')
 
       if (sig !== lastSig) {
@@ -337,19 +404,108 @@ export const studioView = {
       }
     }
 
+    async function loadRepos(token) {
+      oauth.loading = true
+      render()
+      try {
+        const me = await getUser(token)
+        oauth.login = me?.login || ''
+        const repos = await listRepos(token)
+        oauth.repos = (repos || []).map((r) => ({ full: r.full_name, owner: r.owner.login, name: r.name, branch: r.default_branch }))
+        oauth.status = 'idle'
+        oauth.error = ''
+      } catch (error) {
+        oauth.status = 'error'
+        oauth.error = error instanceof Error ? error.message : String(error)
+      } finally {
+        oauth.loading = false
+        render()
+      }
+    }
+
+    async function connectGithub() {
+      const clientId = githubClientId()
+      if (!clientId) {
+        oauth.error = 'Add a GitHub OAuth client id first.'
+        render()
+        return
+      }
+      oauth.controller = new AbortController()
+      oauth.status = 'pending'
+      oauth.error = ''
+      oauth.userCode = ''
+      oauth.login = ''
+      render()
+      try {
+        const flow = await startDeviceFlow(clientId)
+        if (oauth.controller.signal.aborted) return
+        oauth.userCode = flow.userCode
+        oauth.verificationUri = flow.verificationUri
+        render()
+        const token = await pollDeviceToken(clientId, flow.deviceCode, { interval: flow.interval, expiresIn: flow.expiresIn, signal: oauth.controller.signal })
+        updateConfig('github', { token })
+        await loadRepos(token)
+      } catch (error) {
+        if (oauth.controller?.signal.aborted) {
+          oauth.status = 'idle'
+          oauth.error = ''
+          render()
+          return
+        }
+        oauth.status = 'error'
+        oauth.error = error instanceof Error ? error.message : String(error)
+        render()
+      }
+    }
+
+    async function pickRepo(full) {
+      const repo = oauth.repos.find((r) => r.full === full)
+      if (!repo) return
+      updateConfig('github', { owner: repo.owner, repo: repo.name, branch: repo.branch || 'main' })
+      oauth.branches = []
+      render()
+      try {
+        const branches = await listBranches(githubConfig().token, full)
+        oauth.branches = (branches || []).map((b) => b.name)
+      } catch {
+        oauth.branches = []
+      }
+      render()
+    }
+
+    function disconnectGithub() {
+      oauth.controller?.abort()
+      oauth.status = 'idle'
+      oauth.error = ''
+      oauth.login = ''
+      oauth.repos = []
+      oauth.branches = []
+      updateConfig('github', { token: '' })
+      render()
+    }
+
     root.addEventListener('click', (event) => {
       const target = event.target
       if (target.closest('[data-studio-unlock]')) { showAuth.set(true); return }
-      if (target.closest('[data-studio-config]')) { configOpen = !configOpen; render(); return }
+      if (target.closest('[data-studio-config]')) {
+        configOpen = !configOpen
+        render()
+        const token = githubConfig().token
+        if (configOpen && token && !oauth.login && !oauth.loading) void loadRepos(token)
+        return
+      }
       if (target.closest('[data-studio-config-close]')) { configOpen = false; render(); return }
       if (target.closest('[data-studio-save-config]')) {
         const patch = {}
-        for (const input of head.querySelectorAll('[data-studio-field]')) patch[input.dataset.studioField] = input.value.trim()
+        for (const input of root.querySelectorAll('[data-studio-field]')) patch[input.dataset.studioField] = input.value.trim()
         updateConfig('github', patch)
         configOpen = false
         render()
         return
       }
+      if (target.closest('[data-studio-github-connect]')) { void connectGithub(); return }
+      if (target.closest('[data-studio-github-cancel]')) { oauth.controller?.abort(); oauth.status = 'idle'; oauth.error = ''; render(); return }
+      if (target.closest('[data-studio-github-disconnect]')) { disconnectGithub(); return }
       if (target.closest('[data-studio-pull]')) { void pullRepo(); return }
       if (target.closest('[data-studio-save]')) { void saveFile(); return }
       if (target.closest('[data-studio-discard]')) { void discardCurrent(); return }
@@ -383,6 +539,13 @@ export const studioView = {
     searchEl.addEventListener('input', () => {
       query = searchEl.value
       renderRows(siteState.get())
+    })
+
+    root.addEventListener('change', (event) => {
+      const repo = event.target.closest('[data-studio-repo]')
+      if (repo && repo.value) { void pickRepo(repo.value); return }
+      const branch = event.target.closest('[data-studio-branch]')
+      if (branch) { updateConfig('github', { branch: branch.value }); render() }
     })
 
     const onKey = (event) => {
